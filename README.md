@@ -19,13 +19,17 @@ Agentes soportados (16): Claude Code, Codex, Cursor, GitHub Copilot, Antigravity
 ## Estructura
 
 ```
-Sources/NotchCore/      # lógica pura, testeable (sin AppKit)
-Sources/NotchApp/       # NSStatusItem + NSPanel notch + office/shelf/mini
-Sources/NotchOffice/    # pixel office (en NotchApp por ahora, stubs)
+Sources/NotchCore/      # motor: 16 detectores + MonitorEngine (testeado)
+Sources/NotchApp/       # SessionStore, NotchWindow/RootView, PixelOffice,
+                        # Shelf, ReplyService, OfficeHotKey, Mini* (timer, awake,
+                        # stats, quick-note, música, historial, ajustes)
 Tests/NotchCoreTests/
 Scripts/install.sh
 .github/workflows/ci.yml
 ```
+
+Pestañas del notch: estado + avisos, Office, Shelf, Focus (timer+awake),
+Mac (stats+música), Notas (quick-note+historial), ⚙ (auto-send, Obsidian).
 
 ## Build
 
