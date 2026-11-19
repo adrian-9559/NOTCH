@@ -16,6 +16,11 @@ Agentes soportados (16): Claude Code, Codex, Cursor, GitHub Copilot, Antigravity
   - Resto: `~/.gemini`, `~/.qwen`, `~/.cline`, `~/.crush`, `~/.hermes`, `~/.kimi`, `~/.grok`, `~/.droid`, `~/.antigravity`, `~/.kilo`, `~/.pi` + nombre de proceso. Si no existen, degrada a detección por proceso.
 - Estado: `working` (CPU alta o mtime < 60s), `waiting` (patrón approval/permission en log reciente), `done` (idle > 5 min), `crashed` (sesión reciente pero proceso muerto), `idle` resto.
 
+## Documentación
+
+- [Guía de usuario](docs/USER_GUIDE.md): instalación, notch, office, shelf, minis, privacidad.
+- [Guía de desarrollo](docs/DEVELOPER.md): arquitectura, tests y **modelo de ramas** (`develop`, `feature/*`, `fix/*`).
+
 ## Estructura
 
 ```
