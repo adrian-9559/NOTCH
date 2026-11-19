@@ -42,7 +42,7 @@ struct NotchRootView: View {
                     .frame(minHeight: 220)
                 }
             }
-            .padding(.top, 0)
+            .padding(.top, 1)
             .padding([.leading, .trailing, .bottom], 12)
             .frame(width: 520)
             .background(
