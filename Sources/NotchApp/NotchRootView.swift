@@ -18,11 +18,15 @@ struct NotchRootView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let nw = notchWidth {
-                // Pestaña que continúa el notch físico hacia abajo.
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.black)
-                    .frame(width: min(nw, 200), height: 12)
-                    .padding(.bottom, -4)
+                // Pestaña que continúa el notch físico: sin esquinas arriba
+                // y solapada con el panel para que no haya costura.
+                UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: 0, bottomLeading: 8, bottomTrailing: 8, topTrailing: 0),
+                    style: .continuous
+                )
+                .fill(Color.black)
+                .frame(width: min(nw, 200), height: 16)
+                .padding(.bottom, -8)
             }
             VStack(spacing: 10) {
                 statusRow
@@ -38,12 +42,16 @@ struct NotchRootView: View {
                     .frame(minHeight: 220)
                 }
             }
-            .padding(12)
+            .padding(.top, 2)
+            .padding([.leading, .trailing, .bottom], 12)
             .frame(width: 520)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .shadow(radius: 24)
+                UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: 4, bottomLeading: 18, bottomTrailing: 18, topTrailing: 4),
+                    style: .continuous
+                )
+                .fill(.ultraThinMaterial)
+                .shadow(radius: 24)
             )
         }
         // Como Lumio: vidrio oscuro siempre, de día y de noche.
