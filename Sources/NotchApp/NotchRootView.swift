@@ -46,6 +46,8 @@ struct NotchRootView: View {
                     .shadow(radius: 24)
             )
         }
+        // Como Lumio: vidrio oscuro siempre, de día y de noche.
+        .environment(\.colorScheme, .dark)
     }
 
     // Una luz por agente con su color, como Lumio.

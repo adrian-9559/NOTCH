@@ -38,12 +38,20 @@ final class NotchWindowController {
 
     func toggle(anchorX: CGFloat? = nil, topY: CGFloat? = nil) { visible ? hide() : show(anchorX: anchorX, topY: topY) }
 
+    /// Crece desde el notch: arranca como franja de 24pt y se expande.
     func show(anchorX: CGFloat? = nil, topY: CGFloat? = nil) {
         reposition(anchorX: anchorX, topY: topY)
+        let final = panel.frame
+        var start = final
+        start.size.height = 24
+        start.origin.y = final.maxY - 24
+        panel.setFrame(start, display: true)
         panel.orderFrontRegardless()
         panel.alphaValue = 0
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.18
+            ctx.duration = 0.22
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(final, display: true)
             panel.animator().alphaValue = 1
         }
         visible = true
@@ -60,6 +68,9 @@ final class NotchWindowController {
     }
 
     var isVisible: Bool { visible }
+
+    /// Frame actual para la detección de salida del ratón.
+    var frame: NSRect { panel.frame }
 
     /// Ancla el panel al notch: centrado en `anchorX` y colgando de `topY`
     /// (debajo de la barra de menús). Sin ancla, centra en la pantalla.

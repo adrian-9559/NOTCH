@@ -20,9 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store = SessionStore()
     private var windowController: NotchWindowController?
     private var lights = NotchLightsController()
+    private var hover = NotchHoverController()
     private var notchAnchorX: CGFloat?
     private var notchTopY: CGFloat?
     private var notchWidth: CGFloat?
+    private var notchRect: CGRect?
     private var timer: Timer?
     private var officeVisible = false
 
@@ -42,6 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureScreens()
         rebuildWindow()
         installOfficeHotKey()
+        installHover()
+        installMenuHoverToggle()
 
         NotificationCenter.default.addObserver(
             self,
@@ -74,7 +78,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ExtraTabsProvider.tabs()
     }
 
-    @objc private func toggleNotch() { windowController?.toggle(anchorX: notchAnchorX, topY: notchTopY) }
+    @objc private func toggleNotch() {
+        if windowController?.isVisible == true {
+            hidePanel()
+        } else {
+            hover.disarm()
+            showPanel()
+        }
+    }
+
+    private func showPanel() {
+        windowController?.show(anchorX: notchAnchorX, topY: notchTopY)
+    }
+
+    private func hidePanel() {
+        windowController?.hide()
+    }
 
     @objc private func refreshNow() {
         store.refresh()
@@ -110,10 +129,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let main = notches.first(where: { $0.screen == NSScreen.main }) ?? notches.first
         if let m = main, m.layout.hasNotch {
             let n = m.layout.notchRect
+            notchRect = n
             notchAnchorX = n.midX
             notchTopY = m.screen.visibleFrame.maxY - 8
             notchWidth = n.width
         } else {
+            notchRect = nil
             notchAnchorX = nil
             notchTopY = nil
             notchWidth = nil
@@ -121,6 +142,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lights.rebuild(notches: notches, store: store) { [weak self] in
             self?.toggleNotch()
         }
+    }
+
+    // MARK: - Hover: abrir al subir el ratón, cerrar al sacarlo
+
+    private func installHover() {
+        hover.zoneProvider = { [weak self] in
+            (notch: self?.notchRect,
+             panel: self?.windowController?.isVisible == true ? self?.windowController?.frame : nil,
+             visible: self?.windowController?.isVisible ?? false)
+        }
+        hover.onEnter = { [weak self] in self?.showPanel() }
+        hover.onLeave = { [weak self] in self?.hidePanel() }
+        hover.start()
+    }
+
+    private func installMenuHoverToggle() {
+        let item = NSMenuItem(
+            title: "Abrir al pasar el ratón",
+            action: #selector(toggleHover),
+            keyEquivalent: ""
+        )
+        item.state = hover.isEnabled ? .on : .off
+        item.tag = 99
+        statusItem.menu?.insertItem(item, at: 0)
+    }
+
+    @objc private func toggleHover(_ sender: NSMenuItem) {
+        hover.isEnabled.toggle()
+        sender.state = hover.isEnabled ? .on : .off
     }
 
     // MARK: - Office: doble-tap de ⌘ derecha (con fallback al menú si no hay permiso)

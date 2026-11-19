@@ -123,10 +123,16 @@ struct SettingsView: View {
     @State private var autoSend = ReplyService.shared.autoSendEnabled
     @State private var trustState = ReplyService.shared.isTrusted
     @State private var vaultPath: String = UserDefaults.standard.string(forKey: "notchObsidianVault") ?? ""
+    @State private var hoverOpen = UserDefaults.standard.object(forKey: "notchHoverOpen") as? Bool ?? true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("ajustes").font(.caption).foregroundStyle(.secondary)
+            Toggle("Abrir al pasar el ratón por el notch", isOn: $hoverOpen)
+                .font(.callout)
+                .onChange(of: hoverOpen) { v in
+                    UserDefaults.standard.set(v, forKey: "notchHoverOpen")
+                }
             Toggle("Auto-send en Claude (Accessibility)", isOn: $autoSend)
                 .font(.callout)
                 .onChange(of: autoSend) { v in
