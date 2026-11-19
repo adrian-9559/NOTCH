@@ -131,8 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let n = m.layout.notchRect
             notchRect = n
             notchAnchorX = n.midX
-            // Filo a cero: borde superior exacto sin recortar el contenido.
-            notchTopY = m.screen.frame.maxY
+            // Un pelo por debajo del filo: 2px de aire, puntos intactos.
+            notchTopY = m.screen.frame.maxY - 2
             notchWidth = n.width
         } else {
             notchRect = nil
