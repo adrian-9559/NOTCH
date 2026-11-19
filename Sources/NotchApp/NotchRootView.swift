@@ -21,12 +21,12 @@ struct NotchRootView: View {
                 // Pestaña que continúa el notch físico: sin esquinas arriba
                 // y solapada con el panel para que no haya costura.
                 UnevenRoundedRectangle(
-                    cornerRadii: .init(topLeading: 0, bottomLeading: 8, bottomTrailing: 8, topTrailing: 0),
+                    cornerRadii: .init(topLeading: 0, bottomLeading: 6, bottomTrailing: 6, topTrailing: 0),
                     style: .continuous
                 )
                 .fill(Color.black)
-                .frame(width: min(nw, 200), height: 16)
-                .padding(.bottom, -8)
+                .frame(width: min(nw, 200), height: 10)
+                .padding(.bottom, -10)
             }
             VStack(spacing: 10) {
                 statusRow
@@ -42,12 +42,12 @@ struct NotchRootView: View {
                     .frame(minHeight: 220)
                 }
             }
-            .padding(.top, 2)
+            .padding(.top, 0)
             .padding([.leading, .trailing, .bottom], 12)
             .frame(width: 520)
             .background(
                 UnevenRoundedRectangle(
-                    cornerRadii: .init(topLeading: 4, bottomLeading: 18, bottomTrailing: 18, topTrailing: 4),
+                    cornerRadii: .init(topLeading: 0, bottomLeading: 18, bottomTrailing: 18, topTrailing: 0),
                     style: .continuous
                 )
                 .fill(.ultraThinMaterial)
