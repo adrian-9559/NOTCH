@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import NotchCore
+import SwiftUI
 
 /// App mínima: icono en menu bar + ventana notch + polling cada 2s.
 /// Office pixel-art / shelf / mini-features cuelgan de `sessions` aquí.
@@ -16,17 +17,26 @@ final class NotchAppMain: NSObject {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
-    private var engine = MonitorEngine()
+    private var store = SessionStore()
+    private var windowController: NotchWindowController?
     private var timer: Timer?
+    private var officeVisible = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "● NOTCH"
         let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Abrir notch", action: #selector(toggleNotch), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Ver agentes ahora", action: #selector(refreshNow), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Salir", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
+
+        NotchContext.shared.store = store
+        store.onChange = { HistoryStore.shared.record($0) }
+        MiniTabs.register()
+        rebuildWindow()
+        installOfficeHotKey()
 
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.refreshNow()
@@ -34,14 +44,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshNow()
     }
 
-    @objc private func refreshNow() {
-        let sessions = engine.poll()
-        let active = sessions.filter { $0.status == .working || $0.status == .waiting }.count
-        DispatchQueue.main.async { [weak self] in
-            self?.statusItem.button?.title = active > 0 ? "● NOTCH (\(active))" : "○ NOTCH"
-        }
-        // TODO: NotchWindow (NSPanel screenSaver level) + PixelOfficeView + ShelfDrop + MiniFeatures.
-        // El motor ya expone sessions; la UI solo observa este punto.
+    private func rebuildWindow() {
+        let root = NotchRootView(
+            store: store,
+            extraTabs: Self.extraTabs(),
+            onAllow: { [weak self] s in self?.allow(session: s) },
+            onReply: { [weak self] s, text in self?.reply(session: s, text: text) },
+            onOpen: { [weak self] s in self?.open(session: s) }
+        )
+        windowController = NotchWindowController(content: root)
     }
+
+    /// Los lotes 2-5 registran aquí sus vistas sin tocar NotchRootView.
+    /// ExtraTabsProvider se define en archivos posteriores (todos compilan juntos).
+    static func extraTabs() -> [(title: String, view: AnyView)] {
+        ExtraTabsProvider.tabs()
+    }
+
+    @objc private func toggleNotch() { windowController?.toggle() }
+
+    @objc private func refreshNow() {
+        store.refresh()
+        let n = store.active.count
+        statusItem.button?.title = n > 0 ? "● NOTCH (\(n))" : "○ NOTCH"
+    }
+
+    // MARK: - Acciones (lote reply-in-notch las enriquece)
+
+    private func allow(session: AgentSession) {
+        ReplyService.shared.allow(session: session)
+    }
+
+    private func reply(session: AgentSession, text: String) {
+        guard !text.isEmpty else { return }
+        ReplyService.shared.reply(session: session, text: text)
+    }
+
+    private func open(session: AgentSession) {
+        ReplyService.shared.open(session: session)
+    }
+
+    // MARK: - Office: doble-tap de ⌘ derecha (con fallback al menú si no hay permiso)
+
+    private func installOfficeHotKey() {
+        OfficeHotKey.shared.onDoubleTap = { [weak self] in
+            self?.toggleNotch()
+        }
+        OfficeHotKey.shared.install()
+        if OfficeHotKey.shared.isAvailable {
+            let item = NSMenuItem(title: "Office: doble-tap ⌘ der. (activo)", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            statusItem.menu?.insertItem(item, at: 0)
+        }
+    }
+}
+
+/// Punto de extensión para los siguientes lotes. Si ningún lote lo
+/// implementa, el notch muestra solo estado + avisos.
+enum ExtraTabsProvider {
+    static var makeTabs: (() -> [(title: String, view: AnyView)])?
+    static func tabs() -> [(title: String, view: AnyView)] { makeTabs?() ?? [] }
 }
 #endif
