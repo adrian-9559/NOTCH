@@ -1,7 +1,7 @@
 #!/bin/sh
 # Replica del install.sh de Lumio: descarga el zip del release y lo pone en /Applications.
 set -eu
-REPO="${REPO:-tu-usuario/NOTCH}"
+REPO="${REPO:-adrian-9559/NOTCH}"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 echo "Descargando NOTCH…"
