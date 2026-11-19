@@ -31,6 +31,11 @@ Scripts/install.sh
 Pestañas del notch: estado + avisos, Office, Shelf, Focus (timer+awake),
 Mac (stats+música), Notas (quick-note+historial), ⚙ (auto-send, Obsidian).
 
+## Documentación
+
+- [Guía de usuario](docs/USER_GUIDE.md): instalación, notch, office, shelf, minis, privacidad.
+- [Guía de desarrollo](docs/DEVELOPER.md): arquitectura, tests y **modelo de ramas** (`develop`, `feature/*`, `fix/*`).
+
 ## Build
 
 ```sh
