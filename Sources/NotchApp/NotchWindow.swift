@@ -38,28 +38,31 @@ final class NotchWindowController {
 
     func toggle(anchorX: CGFloat? = nil, topY: CGFloat? = nil) { visible ? hide() : show(anchorX: anchorX, topY: topY) }
 
-    /// Crece desde el notch: arranca como franja de 24pt y se expande.
+    /// Aparece cayendo desde el notch: el desplazamiento de ventana entera
+    /// lo hace el compositor (sin relayout), así no se entrecorta.
     func show(anchorX: CGFloat? = nil, topY: CGFloat? = nil) {
         reposition(anchorX: anchorX, topY: topY)
         let final = panel.frame
         var start = final
-        start.size.height = 24
-        start.origin.y = final.maxY - 24
-        panel.setFrame(start, display: true)
+        start.origin.y += 14
+        panel.setFrame(start, display: false)
         panel.orderFrontRegardless()
         panel.alphaValue = 0
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.22
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrame(final, display: true)
+            panel.animator().setFrameOrigin(final.origin)
             panel.animator().alphaValue = 1
         }
         visible = true
     }
 
     func hide() {
+        let up = panel.frame.origin.applying(CGAffineTransform(translationX: 0, y: 10))
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().setFrameOrigin(up)
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             self?.panel.orderOut(nil)
