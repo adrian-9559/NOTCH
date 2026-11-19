@@ -44,7 +44,7 @@ struct NotchRootView: View {
             }
             .padding(.top, 11)
             .padding([.leading, .trailing, .bottom], 12)
-            .frame(width: 520)
+            .frame(width: 680)
             .background(
                 UnevenRoundedRectangle(
                     cornerRadii: .init(topLeading: 0, bottomLeading: 18, bottomTrailing: 18, topTrailing: 0),

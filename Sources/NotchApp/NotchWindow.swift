@@ -7,7 +7,7 @@ import SwiftUI
 final class NotchPanel: NSPanel {
     init(content: some View) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 10),
+            contentRect: NSRect(x: 0, y: 0, width: 680, height: 10),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -77,7 +77,7 @@ final class NotchWindowController {
     func reposition(anchorX: CGFloat? = nil, topY: CGFloat? = nil) {
         guard let screen = NSScreen.main else { return }
         let frame = screen.visibleFrame
-        let w: CGFloat = 520
+        let w: CGFloat = 680
         let x = (anchorX ?? frame.midX) - w / 2
         // Debajo del notch: unos 8pt desde arriba del área visible.
         let y = (topY ?? frame.maxY - 8) - panel.frame.height
