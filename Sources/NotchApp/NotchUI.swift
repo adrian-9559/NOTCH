@@ -131,7 +131,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let n = m.layout.notchRect
             notchRect = n
             notchAnchorX = n.midX
-            notchTopY = m.screen.visibleFrame.maxY - 8
+            // Pegado al borde superior: el panel cuelga del notch por encima
+            // de la barra de menús (ventana a nivel screenSaver).
+            notchTopY = m.screen.frame.maxY
             notchWidth = n.width
         } else {
             notchRect = nil
