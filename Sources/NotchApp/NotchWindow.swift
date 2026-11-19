@@ -34,13 +34,12 @@ final class NotchWindowController {
 
     init<Content: View>(content: Content) {
         panel = NotchPanel(content: content)
-        reposition()
     }
 
-    func toggle() { visible ? hide() : show() }
+    func toggle(anchorX: CGFloat? = nil, topY: CGFloat? = nil) { visible ? hide() : show(anchorX: anchorX, topY: topY) }
 
-    func show() {
-        reposition()
+    func show(anchorX: CGFloat? = nil, topY: CGFloat? = nil) {
+        reposition(anchorX: anchorX, topY: topY)
         panel.orderFrontRegardless()
         panel.alphaValue = 0
         NSAnimationContext.runAnimationGroup { ctx in
@@ -62,13 +61,15 @@ final class NotchWindowController {
 
     var isVisible: Bool { visible }
 
-    private func reposition() {
+    /// Ancla el panel al notch: centrado en `anchorX` y colgando de `topY`
+    /// (debajo de la barra de menús). Sin ancla, centra en la pantalla.
+    func reposition(anchorX: CGFloat? = nil, topY: CGFloat? = nil) {
         guard let screen = NSScreen.main else { return }
         let frame = screen.visibleFrame
         let w: CGFloat = 520
+        let x = (anchorX ?? frame.midX) - w / 2
         // Debajo del notch: unos 8pt desde arriba del área visible.
-        let x = frame.midX - w / 2
-        let y = frame.maxY - 8 - panel.frame.height
+        let y = (topY ?? frame.maxY - 8) - panel.frame.height
         var f = panel.frame
         f.origin = NSPoint(x: x, y: y)
         f.size.width = w

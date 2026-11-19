@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var store = SessionStore()
     private var windowController: NotchWindowController?
+    private var lights = NotchLightsController()
+    private var notchAnchorX: CGFloat?
+    private var notchTopY: CGFloat?
+    private var notchWidth: CGFloat?
     private var timer: Timer?
     private var officeVisible = false
 
@@ -35,8 +39,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotchContext.shared.store = store
         store.onChange = { HistoryStore.shared.record($0) }
         MiniTabs.register()
+        configureScreens()
         rebuildWindow()
         installOfficeHotKey()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screensChanged),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
 
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.refreshNow()
@@ -48,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let root = NotchRootView(
             store: store,
             extraTabs: Self.extraTabs(),
+            notchWidth: notchWidth,
             onAllow: { [weak self] s in self?.allow(session: s) },
             onReply: { [weak self] s, text in self?.reply(session: s, text: text) },
             onOpen: { [weak self] s in self?.open(session: s) }
@@ -61,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ExtraTabsProvider.tabs()
     }
 
-    @objc private func toggleNotch() { windowController?.toggle() }
+    @objc private func toggleNotch() { windowController?.toggle(anchorX: notchAnchorX, topY: notchTopY) }
 
     @objc private func refreshNow() {
         store.refresh()
@@ -82,6 +95,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func open(session: AgentSession) {
         ReplyService.shared.open(session: session)
+    }
+
+    // MARK: - Integración 100% notch (físico o nada)
+
+    /// Recalcula ancla + pestaña + luces para las pantallas actuales.
+    @objc private func screensChanged() {
+        configureScreens()
+        rebuildWindow()
+    }
+
+    private func configureScreens() {
+        let notches = currentScreenNotches()
+        let main = notches.first(where: { $0.screen == NSScreen.main }) ?? notches.first
+        if let m = main, m.layout.hasNotch {
+            let n = m.layout.notchRect
+            notchAnchorX = n.midX
+            notchTopY = m.screen.visibleFrame.maxY - 8
+            notchWidth = n.width
+        } else {
+            notchAnchorX = nil
+            notchTopY = nil
+            notchWidth = nil
+        }
+        lights.rebuild(notches: notches, store: store) { [weak self] in
+            self?.toggleNotch()
+        }
     }
 
     // MARK: - Office: doble-tap de ⌘ derecha (con fallback al menú si no hay permiso)

@@ -8,32 +8,44 @@ import SwiftUI
 struct NotchRootView: View {
     @ObservedObject var store: SessionStore
     var extraTabs: [(title: String, view: AnyView)] = []
+    /// Ancho del notch físico: dibuja la pestaña negra que lo continúa.
+    /// nil = Mac sin notch (sin pestaña).
+    var notchWidth: CGFloat? = nil
     var onAllow: (AgentSession) -> Void = { _ in }
     var onReply: (AgentSession, String) -> Void = { _, _ in }
     var onOpen: (AgentSession) -> Void = { _ in }
 
     var body: some View {
-        VStack(spacing: 10) {
-            statusRow
-            if !store.waiting.isEmpty {
-                waitingBanner
+        VStack(spacing: 0) {
+            if let nw = notchWidth {
+                // Pestaña que continúa el notch físico hacia abajo.
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.black)
+                    .frame(width: min(nw, 200), height: 12)
+                    .padding(.bottom, -4)
             }
-            if !extraTabs.isEmpty {
-                TabView {
-                    ForEach(0..<extraTabs.count, id: \.self) { i in
-                        extraTabs[i].view.tabItem { Text(extraTabs[i].title) }
-                    }
+            VStack(spacing: 10) {
+                statusRow
+                if !store.waiting.isEmpty {
+                    waitingBanner
                 }
-                .frame(minHeight: 220)
+                if !extraTabs.isEmpty {
+                    TabView {
+                        ForEach(0..<extraTabs.count, id: \.self) { i in
+                            extraTabs[i].view.tabItem { Text(extraTabs[i].title) }
+                        }
+                    }
+                    .frame(minHeight: 220)
+                }
             }
+            .padding(12)
+            .frame(width: 520)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .shadow(radius: 24)
+            )
         }
-        .padding(12)
-        .frame(width: 520)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(radius: 24)
-        )
     }
 
     // Una luz por agente con su color, como Lumio.
