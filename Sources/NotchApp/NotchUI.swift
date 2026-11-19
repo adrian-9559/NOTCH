@@ -131,8 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let n = m.layout.notchRect
             notchRect = n
             notchAnchorX = n.midX
-            // 2px por debajo del filo.
-            notchTopY = m.screen.frame.maxY - 2
+            // 5px por debajo del filo.
+            notchTopY = m.screen.frame.maxY - 5
             notchWidth = n.width
         } else {
             notchRect = nil
