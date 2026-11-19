@@ -14,6 +14,7 @@ struct NotchRootView: View {
     var onAllow: (AgentSession) -> Void = { _ in }
     var onReply: (AgentSession, String) -> Void = { _, _ in }
     var onOpen: (AgentSession) -> Void = { _ in }
+    @State private var selectedTab = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,12 +35,22 @@ struct NotchRootView: View {
                     waitingBanner
                 }
                 if !extraTabs.isEmpty {
-                    TabView {
-                        ForEach(0..<extraTabs.count, id: \.self) { i in
-                            extraTabs[i].view.tabItem { Text(extraTabs[i].title) }
+                    // Menú de navegación: botones pequeños arriba a la izquierda.
+                    let sel = min(selectedTab, extraTabs.count - 1)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 4) {
+                            ForEach(0..<extraTabs.count, id: \.self) { i in
+                                NavButton(
+                                    title: extraTabs[i].title,
+                                    icon: iconName(for: extraTabs[i].title),
+                                    selected: i == sel
+                                ) { selectedTab = i }
+                            }
+                            Spacer(minLength: 0)
                         }
+                        extraTabs[sel].view
+                            .frame(minHeight: 220)
                     }
-                    .frame(minHeight: 220)
                 }
             }
             .padding(.top, 11)
@@ -141,6 +152,42 @@ private struct WaitingCard: View {
                 replyText = path
             }
         }
+    }
+}
+
+/// Botón pequeño del menú de navegación del notch.
+private struct NavButton: View {
+    var title: String
+    var icon: String
+    var selected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.caption2)
+                .labelStyle(.iconOnly)
+                .frame(width: 26, height: 22)
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(selected ? Color.accentColor.opacity(0.85) : Color.white.opacity(0.08))
+        )
+        .foregroundStyle(selected ? .white : .secondary)
+        .help(title)
+        .controlSize(.mini)
+    }
+}
+
+private func iconName(for title: String) -> String {
+    switch title {
+    case "Office": return "building.2"
+    case "Shelf": return "tray"
+    case "Focus": return "timer"
+    case "Mac": return "cpu"
+    case "Notas": return "note.text"
+    default: return "gearshape"
     }
 }
 
