@@ -30,7 +30,6 @@ struct NotchRootView: View {
                 .padding(.bottom, -10)
             }
             VStack(spacing: 10) {
-                statusRow
                 if !store.waiting.isEmpty {
                     waitingBanner
                 }
@@ -47,6 +46,9 @@ struct NotchRootView: View {
                                 ) { selectedTab = i }
                             }
                             Spacer(minLength: 0)
+                            Text(store.active.isEmpty ? "sin agentes" : "\(store.active.count) activos")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                         extraTabs[sel].view
                             .frame(minHeight: 220)
@@ -69,17 +71,9 @@ struct NotchRootView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    // Una luz por agente con su color, como Lumio.
+    // Una luz por agente con su color, como Lumio. (Sustituida por la navbar.)
     private var statusRow: some View {
-        HStack(spacing: 8) {
-            ForEach(AgentID.allCases, id: \.self) { agent in
-                AgentDot(agent: agent, session: store.session(for: agent))
-            }
-            Spacer()
-            Text(store.active.isEmpty ? "sin agentes" : "\(store.active.count) activos")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
+        EmptyView()
     }
 
     private var waitingBanner: some View {

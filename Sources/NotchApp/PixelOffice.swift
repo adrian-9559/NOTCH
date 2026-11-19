@@ -14,9 +14,9 @@ struct PixelOfficeView: View {
     var body: some View {
         VStack(spacing: 4) {
             HStack {
-                Text("office").font(.caption).foregroundStyle(.secondary)
+                Text("office").font(.notchMono(11)).foregroundStyle(.secondary)
                 Spacer()
-                Text(sunLabel).font(.caption).foregroundStyle(.secondary)
+                Text(sunLabel).font(.notchMono(11)).foregroundStyle(.secondary)
             }
             Canvas { ctx, size in
                 drawScene(ctx: ctx, size: size)
@@ -134,7 +134,7 @@ struct PixelOfficeView: View {
         }
         // Etiqueta
         let label = "\(agent.displayName)"
-        ctx.draw(Text(label).font(.system(size: 7)).foregroundColor(.secondary),
+        ctx.draw(Text(label).font(.notchMono(7)).foregroundColor(.secondary),
                  at: CGPoint(x: center.x, y: center.y - 24), anchor: .center)
     }
 

@@ -245,7 +245,7 @@ struct ShelfView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("shelf").font(.caption).foregroundStyle(.secondary)
+                Text("shelf").font(.notchMono(11)).foregroundStyle(.secondary)
                 Spacer()
                 Text(shelf.lastAction).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
@@ -286,7 +286,7 @@ private struct ShelfRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Image(systemName: item.autoScreenshot ? "camera" : "doc")
-                Text(item.displayName).font(.callout).lineLimit(1)
+                Text(item.displayName).font(.notchMono(13)).lineLimit(1)
                 Spacer()
                 Button("Ver") { shelf.reveal(item) }.buttonStyle(.link).font(.caption)
                 Button("Borrar") { shelf.remove(item) }.buttonStyle(.link).font(.caption)

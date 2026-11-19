@@ -74,7 +74,7 @@ struct QuickNoteView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("una idea? ⌥ der.").font(.caption).foregroundStyle(.secondary)
+            Text("una idea? ⌥ der.").font(.notchMono(11)).foregroundStyle(.secondary)
             TextField("Tap, type, Enter…", text: $text, onCommit: {
                 store.save(text); text = ""
             })

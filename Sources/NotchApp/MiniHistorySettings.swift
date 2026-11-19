@@ -79,7 +79,7 @@ struct HistoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(dayOffset == 0 ? "hoy" : dayName).font(.caption).foregroundStyle(.secondary)
+                Text(dayOffset == 0 ? "hoy" : dayName).font(.notchMono(11)).foregroundStyle(.secondary)
                 Spacer()
                 Button("‹") { dayOffset = max(-6, dayOffset - 1) }.controlSize(.small)
                 Button("›") { dayOffset = min(0, dayOffset + 1) }.controlSize(.small)

@@ -64,19 +64,19 @@ struct StatsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("mac").font(.caption).foregroundStyle(.secondary)
+            Text("mac").font(.notchMono(11)).foregroundStyle(.secondary)
             HStack(spacing: 12) {
                 VStack(alignment: .leading) {
                     Text("CPU").font(.caption2).foregroundStyle(.secondary)
-                    Text(String(format: "%.0f%%", stats.cpuUser + stats.cpuSys)).font(.headline).monospacedDigit()
+                    Text(String(format: "%.0f%%", stats.cpuUser + stats.cpuSys)).font(.notchMono(15))
                 }
                 VStack(alignment: .leading) {
                     Text("Mem").font(.caption2).foregroundStyle(.secondary)
-                    Text(String(format: "%.1f/%.0f GB", stats.memUsedGB, stats.memTotalGB)).font(.headline).monospacedDigit()
+                    Text(String(format: "%.1f/%.0f GB", stats.memUsedGB, stats.memTotalGB)).font(.notchMono(15))
                 }
                 VStack(alignment: .leading) {
                     Text("Bat").font(.caption2).foregroundStyle(.secondary)
-                    Text(stats.battery.map { "\($0)%\(stats.onAC ? " ⚡" : "")" } ?? "—").font(.headline).monospacedDigit()
+                    Text(stats.battery.map { "\($0)%\(stats.onAC ? " ⚡" : "")" } ?? "—").font(.notchMono(15))
                 }
                 Spacer()
             }

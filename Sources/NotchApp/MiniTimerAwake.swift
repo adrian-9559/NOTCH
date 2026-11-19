@@ -48,14 +48,14 @@ struct TimerView: View {
     @ObservedObject var store: FocusTimerStore
     var body: some View {
         VStack(spacing: 6) {
-            Text("timer").font(.caption).foregroundStyle(.secondary)
+            Text("timer").font(.notchMono(11)).foregroundStyle(.secondary)
             ZStack {
                 ProgressView(value: store.progress)
                     .progressViewStyle(.circular)
                     .scaleEffect(2.2)
                     .padding(14)
                 Text(store.running ? store.label : "\(store.minutes) min")
-                    .font(.headline).monospacedDigit()
+                    .font(.notchMono(16))
             }
             Stepper("Minutos: \(store.minutes)", value: $store.minutes, in: 1...180, step: 5)
                 .font(.caption).disabled(store.running)
@@ -148,7 +148,7 @@ struct AwakeView: View {
     var sessions: SessionStore?
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("keep awake").font(.caption).foregroundStyle(.secondary)
+            Text("keep awake").font(.notchMono(11)).foregroundStyle(.secondary)
             HStack {
                 ForEach([("off", "Off"), ("30m", "30m"), ("1h", "1h"), ("2h", "2h"), ("auto", "Auto")], id: \.0) { key, label in
                     if store.mode == key {

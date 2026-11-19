@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NotchContext.shared.store = store
         store.onChange = { HistoryStore.shared.record($0) }
+        AppFonts.register()
         MiniTabs.register()
         configureScreens()
         rebuildWindow()
