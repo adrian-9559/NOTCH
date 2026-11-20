@@ -36,7 +36,8 @@ enum MiniTabs {
                     Divider()
                     HistoryView()
                 })),
-                (title: "⚙", view: AnyView(SettingsView())),
+                // La ⚙ ya no es pestaña: abre el modal SettingsWindowController
+                // desde el botón de la navbar.
             ]
         }
     }

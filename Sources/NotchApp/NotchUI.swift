@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.title = "● NOTCH"
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Abrir notch", action: #selector(toggleNotch), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Ajustes…", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Ver agentes ahora", action: #selector(refreshNow), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Salir", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -59,6 +60,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshNow()
         }
         refreshNow()
+
+        // Depuración/atajos de lanzamiento: --settings abre el modal de
+        // ajustes al arrancar (útil para capturas y para usuarios).
+        if CommandLine.arguments.contains("--settings") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                self?.openSettings()
+            }
+        }
     }
 
     private func rebuildWindow() {
@@ -100,6 +109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.refresh()
         let n = store.active.count
         statusItem.button?.title = n > 0 ? "● NOTCH (\(n))" : "○ NOTCH"
+    }
+
+    @objc private func openSettings() {
+        SettingsWindowController.shared.show()
     }
 
     // MARK: - Acciones (lote reply-in-notch las enriquece)

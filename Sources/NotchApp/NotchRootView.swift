@@ -5,8 +5,11 @@ import SwiftUI
 /// Vista raíz del notch. Datos desde SessionStore; acciones inyectadas
 /// (Allow/Reply/Open las implementa ReplyService en su lote).
 /// `extraTabs` permite añadir Office/Shelf/Mini sin tocar este archivo.
+/// Los ajustes (color, opacidad, orden/visibilidad de pestañas) viven en
+/// NotchSettings y se aplican al instante: esta vista los observa.
 struct NotchRootView: View {
     @ObservedObject var store: SessionStore
+    @ObservedObject private var settings = NotchSettings.shared
     var extraTabs: [(title: String, view: AnyView)] = []
     /// Ancho del notch físico: dibuja la pestaña negra que lo continúa.
     /// nil = Mac sin notch (sin pestaña).
@@ -14,9 +17,21 @@ struct NotchRootView: View {
     var onAllow: (AgentSession) -> Void = { _ in }
     var onReply: (AgentSession, String) -> Void = { _, _ in }
     var onOpen: (AgentSession) -> Void = { _ in }
-    @State private var selectedTab = 0
+    /// Pestaña seleccionada por título (sobrevive a reordenar/ocultar).
+    @State private var selectedTitle = "Office"
+
+    /// Pestañas visibles, en el orden configurado en Ajustes.
+    private var visibleTabs: [(title: String, view: AnyView)] {
+        let byTitle = Dictionary(
+            uniqueKeysWithValues: extraTabs.map { ($0.title, $0.view) }
+        )
+        return settings.visibleOrder.compactMap { title in
+            byTitle[title].map { (title: title, view: $0) }
+        }
+    }
 
     var body: some View {
+        let tabs = visibleTabs
         VStack(spacing: 0) {
             if let nw = notchWidth {
                 // Pestaña que continúa el notch físico: sin esquinas arriba
@@ -31,42 +46,76 @@ struct NotchRootView: View {
             }
             VStack(spacing: 0) {
                 if !store.waiting.isEmpty {
-                    waitingBanner
-                        .padding(.top, 11)
-                        .padding([.leading, .trailing], 14)
+                    // Avisos con scroll: si hay muchos, todos se ven.
+                    ScrollView {
+                        VStack(spacing: 8) {
+                            ForEach(store.waiting, id: \.agent) { s in
+                                WaitingCard(session: s, onAllow: onAllow, onReply: onReply, onOpen: onOpen)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 150)
+                    .padding(.top, 14)
+                    .padding([.leading, .trailing], 14)
                 }
-                if !extraTabs.isEmpty {
+                if !tabs.isEmpty {
                     // Como Lumio: fila de botones arriba, separador fino,
                     // contenido debajo.
-                    let sel = min(selectedTab, extraTabs.count - 1)
+                    let sel = tabs.firstIndex { $0.title == selectedTitle } ?? 0
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 5) {
-                            ForEach(0..<extraTabs.count, id: \.self) { i in
+                            ForEach(tabs.indices, id: \.self) { i in
                                 NavButton(
-                                    title: extraTabs[i].title,
-                                    icon: iconName(for: extraTabs[i].title),
+                                    title: tabs[i].title,
+                                    icon: iconName(for: tabs[i].title),
                                     selected: i == sel
-                                ) { selectedTab = i }
+                                ) {
+                                    withAnimation(.snappy(duration: 0.22)) {
+                                        selectedTitle = tabs[i].title
+                                    }
+                                }
                             }
                             Spacer(minLength: 0)
                             Text(store.active.isEmpty ? "sin agentes" : "\(store.active.count) activos")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color.white.opacity(0.8))
+                            Button {
+                                SettingsWindowController.shared.show()
+                            } label: {
+                                Image(systemName: "gearshape")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .frame(width: 28, height: 19)
+                            }
+                            .buttonStyle(.plain)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(Color.white.opacity(0.10))
+                            )
+                            .foregroundStyle(Color.white.opacity(0.72))
+                            .help("Ajustes de NOTCH")
                         }
-                        .padding(.top, 10)
+                        .padding(.top, 12)
                         .padding(.bottom, 9)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 14)
 
                         // Separador fino a todo el ancho, como Lumio.
                         Rectangle()
                             .fill(Color.white.opacity(0.16))
                             .frame(height: 1)
 
-                        extraTabs[sel].view
-                            .frame(minHeight: 220)
-                            .padding(.top, 12)
-                            .padding(.bottom, 14)
-                            .padding(.horizontal, 16)
+                        // Altura fija + scroll: nada queda cortado arriba
+                        // ni se sale por abajo. Transición orgánica al
+                        // cambiar de pestaña (crossfade + micro-escala).
+                        ScrollView {
+                            tabs[sel].view
+                                .id(selectedTitle)
+                                .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                        .frame(height: 300)
+                        .padding(.top, 12)
+                        .padding(.bottom, 14)
+                        .padding(.horizontal, 16)
                     }
                 }
             }
@@ -77,7 +126,8 @@ struct NotchRootView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    /// Vidrio casi negro de Lumio (#131413 sobre el fondo), con filo sutil.
+    /// Vidrio casi negro de Lumio con la opacidad elegida en Ajustes.
+    /// Orgánico: luz superior suave (como el filo del notch) + filo fino.
     private var panelGlass: some View {
         let shape = UnevenRoundedRectangle(
             cornerRadii: .init(topLeading: 0, bottomLeading: 18, bottomTrailing: 18, topTrailing: 0),
@@ -85,18 +135,35 @@ struct NotchRootView: View {
         )
         return ZStack {
             shape.fill(.ultraThinMaterial)
-            shape.fill(Color.black.opacity(0.55))
+            shape.fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.05),
+                        Color.black.opacity(settings.panelOpacity),
+                        Color.black.opacity(min(0.97, settings.panelOpacity + 0.06))
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
         }
-        .overlay(shape.stroke(Color.white.opacity(0.07), lineWidth: 1))
+        .overlay(shape.stroke(Color.white.opacity(0.09), lineWidth: 1))
+        // Luz viva en el filo superior, como el canto del cristal.
+        .overlay(alignment: .top) {
+            UnevenRoundedRectangle(
+                cornerRadii: .init(topLeading: 0, bottomLeading: 0, bottomTrailing: 0, topTrailing: 0),
+                style: .continuous
+            )
+            .fill(
+                LinearGradient(
+                    colors: [.white.opacity(0.28), .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(height: 1)
+        }
         .shadow(radius: 24)
-    }
-
-    private var waitingBanner: some View {
-        VStack(spacing: 8) {
-            ForEach(store.waiting, id: \.agent) { s in
-                WaitingCard(session: s, onAllow: onAllow, onReply: onReply, onOpen: onOpen)
-            }
-        }
     }
 }
 
@@ -105,6 +172,7 @@ private struct WaitingCard: View {
     var onAllow: (AgentSession) -> Void
     var onReply: (AgentSession, String) -> Void
     var onOpen: (AgentSession) -> Void
+    @ObservedObject private var settings = NotchSettings.shared
     @State private var replyText = ""
 
     var body: some View {
@@ -117,7 +185,7 @@ private struct WaitingCard: View {
                 Spacer()
                 Text("espera")
                     .font(.notchMono(10))
-                    .foregroundStyle(Color.lumioMagenta)
+                    .foregroundStyle(settings.accent)
             }
             Text(session.detail ?? session.status.rawValue)
                 .font(.notchMono(10))
@@ -126,7 +194,7 @@ private struct WaitingCard: View {
             HStack(spacing: 6) {
                 Button("Allow") { onAllow(session) }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.lumioMagenta)
+                    .tint(settings.accent)
                     .controlSize(.small)
                 TextField("Responder…", text: $replyText, onCommit: {
                     onReply(session, replyText); replyText = ""
@@ -148,7 +216,7 @@ private struct WaitingCard: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.lumioMagenta.opacity(0.45), lineWidth: 1)
+                .stroke(settings.accent.opacity(0.45), lineWidth: 1)
         )
         .onReceive(NotificationCenter.default.publisher(for: .notchPrefillReply)) { note in
             if let path = note.object as? String {
@@ -158,31 +226,40 @@ private struct WaitingCard: View {
     }
 }
 
-/// Botón del menú de navegación, con la píldora magenta de Lumio.
+/// Botón del menú de navegación, con la píldora magenta de Lumio
+/// (color configurable en Ajustes). Orgánico: esquinas suaves, brillo
+/// sutil en la píldora activa y rebote al seleccionar.
 private struct NavButton: View {
     var title: String
     var icon: String
     var selected: Bool
     var action: () -> Void
+    @ObservedObject private var settings = NotchSettings.shared
 
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .medium))
-                .frame(width: 30, height: 19)
+                .frame(width: 32, height: 22)
+                .scaleEffect(selected ? 1.0 : 0.96)
         }
         .buttonStyle(.plain)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(selected ? Color.lumioMagenta : Color.white.opacity(0.10))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(selected ? settings.accent : Color.white.opacity(0.10))
+                .shadow(
+                    color: selected ? settings.accent.opacity(0.45) : .clear,
+                    radius: 6, y: 2
+                )
         )
         .foregroundStyle(selected ? Color.white : Color.white.opacity(0.72))
         .help(title)
         .controlSize(.mini)
+        .animation(.snappy(duration: 0.22), value: selected)
     }
 }
 
-private func iconName(for title: String) -> String {
+func iconName(for title: String) -> String {
     switch title {
     case "Office": return "building.2"
     case "Shelf": return "tray"
@@ -194,8 +271,8 @@ private func iconName(for title: String) -> String {
 }
 
 extension Color {
-    /// Magenta de Lumio (barras y píldora activa: #A550A7).
-    static let lumioMagenta = Color(hex: "A550A7")
+    /// Magenta de Lumio (#A550A7); el valor por defecto de Ajustes.
+    static let lumioMagenta = Color(hex: NotchSettings.defaultAccent)
 
     init(hex: String) {
         let h = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
