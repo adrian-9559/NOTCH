@@ -70,17 +70,29 @@ struct SettingsModalView: View {
     // MARK: - Cabecera
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Circle().fill(settings.accent).frame(width: 10, height: 10)
-            Text("ajustes de notch")
-                .font(.notchMono(13))
-                .foregroundStyle(.white)
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(settings.accent.opacity(0.2))
+                    .frame(width: 30, height: 30)
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(settings.accent)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("ajustes de notch")
+                    .font(.notchMono(13))
+                    .foregroundStyle(.white)
+                Text("todo se aplica al instante")
+                    .font(.notchMono(9))
+                    .foregroundStyle(Color.white.opacity(0.4))
+            }
             Spacer()
             Button {
                 SettingsWindowController.shared.hide()
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
+                    .font(.system(size: 18))
                     .foregroundStyle(Color.white.opacity(0.5))
             }
             .buttonStyle(.plain)
@@ -92,21 +104,26 @@ struct SettingsModalView: View {
     // MARK: - Color
 
     private var colorSection: some View {
-        SettingsSection(title: "color") {
+        SettingsSection(title: "color", icon: "paintpalette.fill") {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     ForEach(Self.palette, id: \.self) { hex in
                         Button {
                             settings.accentHex = hex
                         } label: {
-                            Circle()
-                                .fill(Color(hex: hex))
-                                .frame(width: 22, height: 22)
-                                .overlay {
-                                    if settings.accentHex.uppercased() == hex {
-                                        Circle().stroke(.white, lineWidth: 2)
-                                    }
+                            ZStack {
+                                Circle()
+                                    .fill(Color(hex: hex))
+                                    .frame(width: 26, height: 26)
+                                if settings.accentHex.uppercased() == hex {
+                                    Circle()
+                                        .stroke(.white, lineWidth: 2)
+                                        .frame(width: 26, height: 26)
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(.white)
                                 }
+                            }
                         }
                         .buttonStyle(.plain)
                     }
@@ -118,9 +135,16 @@ struct SettingsModalView: View {
                     .frame(width: 30)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("opacidad del panel  \(Int(settings.panelOpacity * 100))%")
-                        .font(.notchMono(10))
-                        .foregroundStyle(Color.white.opacity(0.6))
+                    HStack {
+                        Text("opacidad del panel")
+                            .font(.notchMono(10))
+                            .foregroundStyle(Color.white.opacity(0.6))
+                        Spacer()
+                        Text("\(Int(settings.panelOpacity * 100))%")
+                            .font(.notchMono(10))
+                            .foregroundStyle(settings.accent)
+                            .monospacedDigit()
+                    }
                     Slider(value: $settings.panelOpacity, in: 0.55...0.95, step: 0.05)
                         .tint(settings.accent)
                 }
@@ -131,7 +155,7 @@ struct SettingsModalView: View {
     // MARK: - Navbar
 
     private var navbarSection: some View {
-        SettingsSection(title: "navbar") {
+        SettingsSection(title: "navbar", icon: "menubar.rectangle", badge: "\(settings.visibleOrder.count)") {
             VStack(spacing: 6) {
                 ForEach(settings.tabOrder, id: \.self) { title in
                     HStack(spacing: 8) {
@@ -193,10 +217,11 @@ struct SettingsModalView: View {
     // MARK: - Comportamiento
 
     private var behaviorSection: some View {
-        SettingsSection(title: "comportamiento") {
-            VStack(alignment: .leading, spacing: 8) {
+        SettingsSection(title: "comportamiento", icon: "slider.horizontal.3") {
+            VStack(alignment: .leading, spacing: 4) {
                 SettingsToggleRow(
                     label: "Abrir al pasar el ratón por el notch",
+                    subtitle: "El panel se abre solo al subir el ratón",
                     isOn: $hoverOpen,
                     accent: settings.accent
                 ) {
@@ -204,6 +229,7 @@ struct SettingsModalView: View {
                 }
                 SettingsToggleRow(
                     label: "Auto-send en Claude (Accessibility)",
+                    subtitle: "Envía el reply con Enter, sin ⌘V",
                     isOn: $autoSend,
                     accent: settings.accent
                 ) {
@@ -218,19 +244,26 @@ struct SettingsModalView: View {
                     .foregroundStyle(Color.white.opacity(0.45))
                 SettingsToggleRow(
                     label: "Aviso al cambiar de canción",
+                    subtitle: "Píldora con carátula al sonar otra",
                     isOn: $settings.songToastEnabled,
                     accent: settings.accent
                 ) {}
                 SettingsToggleRow(
                     label: "Aviso al terminar un agente",
+                    subtitle: "Píldora cuando acaba de verdad",
                     isOn: $settings.agentToastEnabled,
                     accent: settings.accent
                 ) {}
-                TextField("Obsidian vault (dev log)", text: $vaultPath, onCommit: {
-                    UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
-                })
-                .textFieldStyle(.roundedBorder)
-                .font(.notchMono(11))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Obsidian vault (dev log)")
+                        .font(.notchMono(10))
+                        .foregroundStyle(Color.white.opacity(0.6))
+                    TextField("ruta del vault…", text: $vaultPath, onCommit: {
+                        UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
+                    })
+                    .textFieldStyle(.roundedBorder).font(.caption)
+                }
+                .padding(.top, 4)
             }
         }
     }
@@ -238,11 +271,17 @@ struct SettingsModalView: View {
     // MARK: - Privacidad
 
     private var privacySection: some View {
-        SettingsSection(title: "privacidad") {
-            Text("Todo queda en tu Mac. Sin cuentas, sin tracking, sin Screen Recording. El historial vive en ~/Library/Application Support/NOTCH.")
-                .font(.system(size: 11))
-                .foregroundStyle(Color.white.opacity(0.55))
-                .fixedSize(horizontal: false, vertical: true)
+        SettingsSection(title: "privacidad", icon: "lock.fill") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Todo queda en tu Mac. Sin cuentas, sin tracking, sin Screen Recording. El historial vive en ~/Library/Application Support/NOTCH.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("NOTCH · 100% local")
+                    .font(.notchMono(9))
+                    .foregroundStyle(Color.white.opacity(0.35))
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
         }
     }
 
@@ -263,34 +302,65 @@ struct SettingsModalView: View {
 
 // MARK: - Piezas
 
-/// Tarjeta de sección: rótulo mono + fondo sutil.
+/// Tarjeta de sección: icono + rótulo mono (+ contador) y fondo sutil.
 private struct SettingsSection<Content: View>: View {
     var title: String
+    var icon: String
+    var badge: String? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.notchMono(11))
-                .foregroundStyle(Color.white.opacity(0.5))
-                .kerning(1.5)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                Text(title)
+                    .font(.notchMono(11))
+                    .foregroundStyle(Color.white.opacity(0.5))
+                    .kerning(1.5)
+                if let badge {
+                    Text(badge)
+                        .font(.notchMono(9))
+                        .foregroundStyle(Color.white.opacity(0.6))
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(Capsule().fill(Color.white.opacity(0.1)))
+                }
+            }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.07), lineWidth: 1)
+        )
     }
 }
 
 private struct SettingsToggleRow: View {
     var label: String
+    var subtitle: String? = nil
     @Binding var isOn: Bool
     var accent: Color
     var onChange: () -> Void
 
     var body: some View {
         HStack {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.white.opacity(0.85))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+            }
             Spacer()
             Toggle("", isOn: $isOn)
                 .toggleStyle(.switch)
@@ -299,6 +369,7 @@ private struct SettingsToggleRow: View {
                 .tint(accent)
                 .onChange(of: isOn) { _ in onChange() }
         }
+        .padding(.vertical, 3)
     }
 }
 
