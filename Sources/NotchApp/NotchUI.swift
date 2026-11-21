@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store = SessionStore()
     private var windowController: NotchWindowController?
     private var lights = NotchLightsController()
+    private var aura = NotchAuraController()
     private var hover = NotchHoverController()
     private var notchAnchorX: CGFloat?
     private var notchTopY: CGFloat?
@@ -157,6 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lights.rebuild(notches: notches, store: store) { [weak self] in
             self?.toggleNotch()
         }
+        // El aura va detrás: se ordena primero y el panel queda delante.
+        aura.rebuild(notches: notches)
     }
 
     // MARK: - Hover: abrir al subir el ratón, cerrar al sacarlo
