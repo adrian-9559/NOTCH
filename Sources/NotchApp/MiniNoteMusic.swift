@@ -32,7 +32,7 @@ final class QuickNoteStore: ObservableObject {
                 .appendingPathComponent("\(df.string(from: Date())).md")
             append(line, to: daily)
         }
-        lastSaved = "Guardado ✓"
+        lastSaved = tr("note.saved")
     }
 
     func saveToAppleNotes(_ text: String) {
@@ -40,9 +40,9 @@ final class QuickNoteStore: ObservableObject {
         guard !trimmed.isEmpty else { return }
         let script = "tell application \"Notes\" to make new note at folder \"Notes\" with properties {body:\(quoted(trimmed))}"
         if HandoffService.osascript(script) {
-            lastSaved = "En Apple Notes ✓"
+            lastSaved = tr("note.inNotes")
         } else {
-            lastSaved = "Notes: permite Automatización en Ajustes"
+            lastSaved = tr("note.noNotes")
         }
     }
 
@@ -70,23 +70,24 @@ final class QuickNoteStore: ObservableObject {
 
 struct QuickNoteView: View {
     @ObservedObject var store: QuickNoteStore
+    @ObservedObject private var settings = NotchSettings.shared
     @State private var text = ""
     @State private var vaultPath: String = UserDefaults.standard.string(forKey: "notchObsidianVault") ?? ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("una idea? ⌥ der.").font(.notchMono(11)).foregroundStyle(.secondary)
-            TextField("Tap, type, Enter…", text: $text, onCommit: {
+            Text(tr("note.hint")).font(.notchMono(11)).foregroundStyle(.secondary)
+            TextField(tr("note.ph"), text: $text, onCommit: {
                 store.save(text); text = ""
             })
             .textFieldStyle(.roundedBorder)
             HStack {
-                Button("Guardar") { store.save(text); text = "" }.controlSize(.small).buttonStyle(.borderedProminent)
-                Button("→ Notes") { store.saveToAppleNotes(text); text = "" }.controlSize(.small)
+                Button(tr("note.save")) { store.save(text); text = "" }.controlSize(.small).buttonStyle(.borderedProminent)
+                Button(tr("note.toNotes")) { store.saveToAppleNotes(text); text = "" }.controlSize(.small)
                 Text(store.lastSaved).font(.caption2).foregroundStyle(.secondary)
             }
             .buttonStyle(.bordered)
-            TextField("Obsidian vault (opcional)", text: $vaultPath, onCommit: {
+            TextField(tr("note.vaultPh"), text: $vaultPath, onCommit: {
                 UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
             })
             .textFieldStyle(.roundedBorder).font(.caption)
@@ -227,10 +228,15 @@ final class MusicStore: ObservableObject {
         let parts = out.split(separator: "|", maxSplits: 4, omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }
         guard parts.count == 5, !parts[0].isEmpty else { return nil }
-        var dur = Double(parts[3]) ?? 0
+        var dur = Self.num(parts[3])
         // Spotify devuelve milisegundos en algunos versiones.
         if dur > 6000 { dur /= 1000 }
-        return (parts[0], parts[1], Double(parts[2]) ?? 0, dur, parts[4] == "playing")
+        return (parts[0], parts[1], Self.num(parts[2]), dur, parts[4] == "playing")
+    }
+
+    /// Número con coma o punto decimal (el AppleScript respeta el locale).
+    static func num(_ s: String) -> Double {
+        Double(s.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")) ?? 0
     }
 
     // MARK: - Carátula + color dominante
@@ -381,6 +387,7 @@ final class MusicStore: ObservableObject {
 /// a la derecha. El color de la carátula ilumina el panel del notch.
 struct MusicView: View {
     @ObservedObject var store: MusicStore
+    @ObservedObject private var settings = NotchSettings.shared
 
     private var fraction: Double {
         store.duration > 0 ? min(1, max(0, store.position / store.duration)) : 0
@@ -392,12 +399,12 @@ struct MusicView: View {
             HStack(spacing: 14) {
                 artworkStack
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.title.isEmpty ? "SILENCIO" : store.title.uppercased())
+                    Text(store.title.isEmpty ? tr("mus.silence") : store.title.uppercased())
                         .font(.notchMono(15))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    Text(store.title.isEmpty ? "Music / Spotify" : (store.artist.isEmpty ? store.source : store.artist))
+                    Text(store.title.isEmpty ? tr("mus.none") : (store.artist.isEmpty ? store.source : store.artist))
                         .font(.notchMono(11))
                         .foregroundStyle(Color.white.opacity(0.6))
                         .lineLimit(1)
@@ -508,7 +515,7 @@ struct MusicView: View {
             Circle()
                 .fill(store.title.isEmpty ? Color.white.opacity(0.3) : wash.opacity(store.playing ? 1 : 0.45))
                 .frame(width: 5, height: 5)
-            Text(store.source.isEmpty ? "MÚSICA" : store.source.uppercased())
+            Text(store.source.isEmpty ? tr("mus.music") : store.source.uppercased())
                 .font(.notchMono(9))
                 .kerning(1)
         }

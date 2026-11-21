@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 import Darwin
 import SwiftUI
 
@@ -59,6 +60,11 @@ enum MacPanelReader {
         return (chip, total, e, p)
     }
 
+    /// Últimos ticks para la CPU por deltas (los ticks de mach son
+    /// acumulados desde el arranque: sin deltas sale la media de toda
+    /// la sesión, no el uso actual).
+    private static var lastTicks: (u: Double, s: Double, idle: Double, nice: Double)?
+
     /// Barato (mach + batería + carga): cada 2 s en main.
     static func readLight(into s: inout MacPanelSnapshot) {
         var cpu = host_cpu_load_info_data_t()
@@ -68,11 +74,16 @@ enum MacPanelReader {
                 host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, $0, &cpuCount)
             }
         }) == KERN_SUCCESS {
-            let u = Double(cpu.cpu_ticks.0), sys = Double(cpu.cpu_ticks.1)
-            let idle = Double(cpu.cpu_ticks.2), nice = Double(cpu.cpu_ticks.3)
-            let total = max(1, u + sys + idle + nice)
-            s.cpuUser = u / total * 100
-            s.cpuSys = sys / total * 100
+            let cur = (u: Double(cpu.cpu_ticks.0), s: Double(cpu.cpu_ticks.1),
+                       idle: Double(cpu.cpu_ticks.2), nice: Double(cpu.cpu_ticks.3))
+            if let last = lastTicks {
+                let du = max(0, cur.u - last.u), ds = max(0, cur.s - last.s)
+                let di = max(0, cur.idle - last.idle), dn = max(0, cur.nice - last.nice)
+                let total = max(1, du + ds + di + dn)
+                s.cpuUser = du / total * 100
+                s.cpuSys = ds / total * 100
+            }
+            lastTicks = cur
         }
         var vm = vm_statistics64_data_t()
         var vmCount = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
@@ -284,6 +295,7 @@ func severityColor(fraction: Double) -> Color {
 
 struct StatsView: View {
     var sessions: SessionStore
+    @ObservedObject private var settings = NotchSettings.shared
     @State private var snap = MacPanelSnapshot()
     @State private var peakCpu: Double = 0
     @State private var peakAt = Date()
@@ -291,6 +303,11 @@ struct StatsView: View {
     @State private var memGB: Double = 16
     @State private var eCores = 0
     @State private var pCores = 0
+    /// Secciones plegadas (persisten): menos datos a la vista.
+    @AppStorage("macFoldLoads") private var foldLoads = false
+    @AppStorage("macFoldServers") private var foldServers = false
+    @AppStorage("macFoldBattery") private var foldBattery = false
+    @AppStorage("macFoldJunk") private var foldJunk = false
     /// Proceso desplegado (detalle + terminar).
     @State private var expandedPid: Int32 = 0
     @StateObject private var junk = JunkStore()
@@ -305,7 +322,7 @@ struct StatsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("mac").font(.notchMono(11)).foregroundStyle(.secondary)
+                Text(tr("mac.title")).font(.notchMono(11)).foregroundStyle(.secondary)
                 Spacer()
                 Text(chip).font(.notchMono(11)).foregroundStyle(.secondary)
             }
@@ -318,22 +335,23 @@ struct StatsView: View {
                           sub: String(format: "%.1f of %.0f GB", snap.memUsedGB, snap.memTotalGB),
                           fraction: memFrac, color: severityColor(fraction: memFrac))
                     .frame(maxWidth: .infinity)
-                batteryBlock.frame(maxWidth: .infinity, alignment: .leading)
+                batteryMini.frame(maxWidth: .infinity, alignment: .leading)
             }
             // Presión de memoria + pico del último minuto.
             VStack(alignment: .leading, spacing: 3) {
                 memoryBar
                 HStack {
-                    Text("last minute: up to \(Int(peakCpu.rounded()))%")
+                    Text(tr("mac.lastMin", Int(peakCpu.rounded())))
                     Spacer()
                     Text("\(pressureWord) · swap \(String(format: "%.0f", snap.swapUsedGB)) GB")
                 }
                 .font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5))
             }
-            // Qué carga el Mac.
-            Text("WHAT LOADS THE MAC").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
-            loadBar
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
+            // Qué carga el Mac (plegable).
+            sectionHeader(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total", folded: $foldLoads)
+            if !foldLoads {
+                loadBar
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
                 ForEach(loadTops, id: \.name) { t in
                     Button {
                         expandedPid = expandedPid == t.pid ? 0 : t.pid
@@ -355,61 +373,63 @@ struct StatsView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Detalle de \(t.name)")
-                    .help("Detalle del proceso")
+                    .accessibilityLabel(tr("mac.detail", t.name))
+                    .help(tr("mac.detail", t.name))
                 }
-            }
-            HStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.3)).frame(width: 9, height: 9)
-                Text("macOS & the rest").font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
-                Spacer()
-                Text(verbatim: "\(Int(loadRest.rounded()))%").font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
-            }
-            // Detalle del proceso desplegado: para entender y optimizar.
-            if let t = loadTops.first(where: { $0.pid == expandedPid }) {
-                HStack(spacing: 8) {
-                    Text(verbatim: "PID \(t.pid) · \(Int(t.memMB.rounded())) MB · \(t.user) · \(t.etime)")
-                        .font(.notchMono(10)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                HStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.3)).frame(width: 9, height: 9)
+                    Text(tr("mac.rest")).font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
                     Spacer()
-                    if t.pid > 500 {
-                        Button("Terminar") { confirmStop(t) }
-                            .controlSize(.mini).buttonStyle(.bordered)
-                    }
+                    Text(verbatim: "\(Int(loadRest.rounded()))%").font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
                 }
-                .padding(.horizontal, 8).padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
+                // Detalle del proceso desplegado: para entender y optimizar.
+                if let t = loadTops.first(where: { $0.pid == expandedPid }) {
+                    HStack(spacing: 8) {
+                        Text(verbatim: "PID \(t.pid) · \(Int(t.memMB.rounded())) MB · \(t.user) · \(t.etime)")
+                            .font(.notchMono(10)).foregroundStyle(.secondary).lineLimit(1)
+                        Spacer()
+                        if t.pid > 500 {
+                            Button("Terminar") { confirmStop(t) }
+                                .controlSize(.mini).buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
+                }
             }
             // Servidores de agentes (máx. 5 + resto, como Lumio).
-            Text(snap.servers.count > 5 ? "AGENT SERVERS +\(snap.servers.count - 5)" : "AGENT SERVERS")
-                .font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
-            if snap.servers.isEmpty {
-                Text("sin servidores en escucha").font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(snap.servers.prefix(5), id: \.port) { sv in
-                    HStack(spacing: 8) {
-                        Image(systemName: "square").font(.system(size: 9)).foregroundStyle(.secondary)
-                        // verbatim: si no, el Int se localiza ("24.282").
-                        Text(verbatim: ":\(sv.port) \(sv.proc)").font(.notchMono(11)).foregroundStyle(.white)
-                        Text(sv.agent.map { "\($0) · running" } ?? "proceso").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        Spacer()
-                        Button("Open") { MacPanelReader.openPort(sv.port) }.controlSize(.small).buttonStyle(.bordered)
-                            .tint(.green)
-                        Button("Stop") { MacPanelReader.stopPid(sv.pid); refreshHeavy() }.controlSize(.small).buttonStyle(.bordered)
+            sectionHeader(
+                title: snap.servers.count > 5 ? "\(tr("mac.servers")) +\(snap.servers.count - 5)" : tr("mac.servers"),
+                folded: $foldServers
+            )
+            if !foldServers {
+                if snap.servers.isEmpty {
+                    Text(tr("mac.noServers")).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ForEach(snap.servers.prefix(5), id: \.port) { sv in
+                        HStack(spacing: 8) {
+                            Image(systemName: "square").font(.system(size: 9)).foregroundStyle(.secondary)
+                            // verbatim: si no, el Int se localiza ("24.282").
+                            Text(verbatim: ":\(sv.port) \(sv.proc)").font(.notchMono(11)).foregroundStyle(.white)
+                            Text(sv.agent.map { "\($0) · \(tr("mac.running"))" } ?? tr("mac.process")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            Spacer()
+                            Button(tr("mac.open")) { MacPanelReader.openPort(sv.port) }.controlSize(.small).buttonStyle(.bordered)
+                                .tint(.green)
+                            Button(tr("mac.stop")) { MacPanelReader.stopPid(sv.pid); refreshHeavy() }.controlSize(.small).buttonStyle(.bordered)
+                        }
+                        .font(.caption)
                     }
-                    .font(.caption)
                 }
             }
-            // Batería extendida: salud, ciclos, potencia y tiempo.
-            Text("BATERÍA").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
-                battCell("Salud", battHealthText, battHealthColor)
-                battCell("Ciclos", snap.batt.cycles > 0 ? "\(snap.batt.cycles)" : "—", .white.opacity(0.85))
-                battCell("Potencia", snap.batt.watts == 0 ? "—" : String(format: "%+.0f W", snap.batt.watts), .white.opacity(0.85))
-                battCell("Restan", battTimeText, .white.opacity(0.85))
+            // Batería extendida en una tarjeta con su logo.
+            sectionHeader(title: tr("mac.battery"), sub: battStateWord, folded: $foldBattery)
+            if !foldBattery {
+                batteryCard
             }
             // Limpieza de datos temporales de agentes (solo parados).
-            JunkSectionView(store: sessions, junk: junk)
-            Text("NOTCH itself uses \(String(format: "%.0f", snap.selfCpu))% · \(String(format: "%.0f", snap.selfMB)) MB")
+            JunkSectionView(store: sessions, junk: junk, folded: $foldJunk)
+            Text(tr("mac.self", Int(snap.selfCpu.rounded()), Int(snap.selfMB.rounded())))
                 .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.35))
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -428,7 +448,29 @@ struct StatsView: View {
 
     // MARK: - piezas
 
-    private var batteryBlock: some View {
+    /// Cabecera de sección plegable (persiste en Ajustes internos).
+    private func sectionHeader(title: String, sub: String = "", folded: Binding<Bool>) -> some View {
+        Button {
+            folded.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
+                if !sub.isEmpty {
+                    Text(sub).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.35))
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.4))
+                    .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var batteryMini: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("BATTERY").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
             HStack(spacing: 6) {
@@ -451,7 +493,7 @@ struct StatsView: View {
                 Text(snap.battery.map { "\($0)%" } ?? "—")
                     .font(.notchMono(16)).foregroundStyle(.white).monospacedDigit()
             }
-            Text(snap.battery.map { $0 >= 99 ? "llena" : (snap.onAC ? "charging" : "en batería") } ?? "sin batería")
+            Text(battStateWord.isEmpty ? tr("mac.noBattery") : battStateWord)
                 .font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5))
         }
     }
@@ -461,10 +503,62 @@ struct StatsView: View {
         return severityColor(fraction: 1 - Double(level) / 100)
     }
 
+    private var battStateWord: String {
+        if snap.battery == nil { return "" }
+        if (snap.battery ?? 0) >= 99 { return tr("mac.full") }
+        return snap.onAC ? tr("mac.charging") : tr("mac.onBattery")
+    }
+
+    /// Tarjeta de batería: logo con carga y estado + rejilla de salud.
+    private var batteryCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.5), lineWidth: 2)
+                        .frame(width: 46, height: 23)
+                    RoundedRectangle(cornerRadius: 1).fill(Color.white.opacity(0.5)).frame(width: 3, height: 9)
+                        .offset(x: 47)
+                    if let b = snap.battery {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(batteryColor(b))
+                            .frame(width: max(4, 39 * CGFloat(b) / 100), height: 14)
+                            .padding(.leading, 4)
+                        if snap.onAC {
+                            Image(systemName: "bolt.fill").font(.system(size: 10)).foregroundStyle(.black)
+                                .padding(.leading, 10)
+                        }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(snap.battery.map { "\($0)%" } ?? "—")
+                        .font(.notchMono(17)).foregroundStyle(.white).monospacedDigit()
+                    Text(battStateWord)
+                        .font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5))
+                }
+                Spacer()
+            }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
+                battCell(tr("mac.health"), battHealthText, battHealthColor)
+                battCell(tr("mac.cycles"), snap.batt.cycles > 0 ? "\(snap.batt.cycles)" : "—", .white.opacity(0.85))
+                battCell(tr("mac.power"), snap.batt.watts == 0 ? "—" : String(format: "%+.0f W", snap.batt.watts), .white.opacity(0.85))
+                battCell(snap.onAC ? tr("mac.toFull") : tr("mac.left"), battTimeText, .white.opacity(0.85))
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
     private var pressureWord: String {
-        if snap.memFreeFrac > 0.25 { return "normal" }
-        if snap.memFreeFrac > 0.12 { return "tight" }
-        return "critical"
+        if snap.memFreeFrac > 0.25 { return tr("mac.normal") }
+        if snap.memFreeFrac > 0.12 { return tr("mac.tight") }
+        return tr("mac.critical")
     }
 
     private var memoryBar: some View {
@@ -514,10 +608,10 @@ struct StatsView: View {
     /// Terminar con confirmación (solo PIDs de usuario, nunca sistema).
     private func confirmStop(_ t: ProcTop) {
         let a = NSAlert()
-        a.messageText = "Terminar \(t.name)?"
-        a.informativeText = "PID \(t.pid) · \(Int(t.memMB.rounded())) MB. Se envía SIGTERM."
-        a.addButton(withTitle: "Terminar")
-        a.addButton(withTitle: "Cancelar")
+        a.messageText = tr("mac.termTitle", t.name)
+        a.informativeText = tr("mac.termBody", Int32(t.pid), Int(t.memMB.rounded()))
+        a.addButton(withTitle: tr("mac.termOk"))
+        a.addButton(withTitle: tr("mac.cancel"))
         if a.runModal() == .alertFirstButtonReturn {
             MacPanelReader.stopPid(t.pid)
             refreshHeavy()
@@ -719,8 +813,8 @@ final class JunkStore: ObservableObject {
     func trashRow(_ row: JunkRow) {
         let r = Self.trash(paths: row.paths)
         lastCleaned = r.failed == 0
-            ? "\(row.agent)/\(row.label) → papelera"
-            : "\(row.agent)/\(row.label): \(r.failed) fallos"
+            ? "\(row.agent)/\(row.label) \(tr("mac.toTrash"))"
+            : tr("mac.trashFails", r.failed)
         scan()
     }
 
@@ -728,8 +822,8 @@ final class JunkStore: ObservableObject {
         let all = rows.flatMap(\.paths)
         let r = Self.trash(paths: all)
         lastCleaned = r.failed == 0
-            ? "\(Self.formatBytes(allBytes)) → papelera"
-            : "Papelera con \(r.failed) fallos"
+            ? "\(Self.formatBytes(allBytes)) \(tr("mac.toTrash"))"
+            : tr("mac.trashFails", r.failed)
         scan()
     }
 
@@ -743,67 +837,86 @@ final class JunkStore: ObservableObject {
 }
 
 /// Sección LIMPIEZA: qué basura hay por agente y botón para llevarla a
-/// la papelera. Solo activo con todos los agentes parados.
+/// la papelera. Solo activo con todos los agentes parados. Plegable.
 struct JunkSectionView: View {
     var store: SessionStore
     @ObservedObject var junk: JunkStore
+    @ObservedObject private var settings = NotchSettings.shared
+    var folded: Binding<Bool>
 
     private var allIdle: Bool { store.active.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("LIMPIEZA").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
-                Spacer()
-                if junk.scanning {
-                    Text("midiendo…").font(.notchMono(10)).foregroundStyle(.secondary)
-                } else if !junk.rows.isEmpty {
-                    Text(JunkStore.formatBytes(junk.allBytes)).font(.notchMono(10)).foregroundStyle(.secondary).monospacedDigit()
-                }
-            }
-            if junk.rows.isEmpty, !junk.scanning {
-                Text("sin basura de agentes").font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(junk.rows) { row in
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(agentColor(for: row.agent, default: Color.gray))
-                            .frame(width: 7, height: 7)
-                        Text("\(row.agent) · \(row.label)")
-                            .font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
-                        Spacer()
-                        Text(JunkStore.formatBytes(row.bytes))
-                            .font(.notchMono(10)).foregroundStyle(.secondary).monospacedDigit()
-                        Button {
-                            junk.trashRow(row)
-                        } label: {
-                            Image(systemName: "trash").font(.system(size: 10))
-                        }
-                        .buttonStyle(.bordered).controlSize(.mini)
-                        .disabled(!allIdle)
-                        .help(allIdle ? "A la papelera (recuperable)" : "Para cuando paren los agentes")
+            Button {
+                folded.wrappedValue.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(tr("mac.junk")).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
+                    if junk.scanning {
+                        Text(tr("mac.measuring")).font(.notchMono(10)).foregroundStyle(.secondary)
+                    } else if !junk.rows.isEmpty {
+                        Text(JunkStore.formatBytes(junk.allBytes)).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.35)).monospacedDigit()
                     }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.4))
+                        .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
                 }
-                Button(allIdle ? "Limpiar todo → papelera" : "Para cuando paren los agentes") {
-                    confirmClean()
-                }
-                .controlSize(.small).buttonStyle(.borderedProminent).tint(.red)
-                .disabled(!allIdle || junk.rows.isEmpty)
+                .contentShape(Rectangle())
             }
-            if !junk.lastCleaned.isEmpty {
-                Text(junk.lastCleaned).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            .buttonStyle(.plain)
+            if !folded.wrappedValue {
+                junkBody
             }
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
     }
 
+    @ViewBuilder
+    private var junkBody: some View {
+        if junk.rows.isEmpty, !junk.scanning {
+            Text(tr("mac.noJunk")).font(.caption).foregroundStyle(.secondary)
+        } else {
+            ForEach(junk.rows) { row in
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(agentColor(for: row.agent, default: Color.gray))
+                        .frame(width: 7, height: 7)
+                    Text("\(row.agent) · \(row.label)")
+                        .font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+                    Spacer()
+                    Text(JunkStore.formatBytes(row.bytes))
+                        .font(.notchMono(10)).foregroundStyle(.secondary).monospacedDigit()
+                    Button {
+                        junk.trashRow(row)
+                    } label: {
+                        Image(systemName: "trash").font(.system(size: 10))
+                    }
+                    .buttonStyle(.bordered).controlSize(.mini)
+                    .disabled(!allIdle)
+                    .help(allIdle ? tr("mac.toTrash") : tr("mac.waitAgents"))
+                }
+            }
+            Button(allIdle ? tr("mac.cleanAll") : tr("mac.waitAgents")) {
+                confirmClean()
+            }
+            .controlSize(.small).buttonStyle(.borderedProminent).tint(.red)
+            .disabled(!allIdle || junk.rows.isEmpty)
+        }
+        if !junk.lastCleaned.isEmpty {
+            Text(junk.lastCleaned).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
     private func confirmClean() {
         let a = NSAlert()
-        a.messageText = "Llevar \(JunkStore.formatBytes(junk.allBytes)) a la papelera?"
-        a.informativeText = "Basura regenerable de \(Set(junk.rows.map(\.agent)).sorted().joined(separator: ", ")) (historiales, snapshots, logs, cachés). Recuperable desde la papelera."
-        a.addButton(withTitle: "Limpiar")
-        a.addButton(withTitle: "Cancelar")
+        a.messageText = tr("mac.cleanTitle", JunkStore.formatBytes(junk.allBytes))
+        a.informativeText = tr("mac.cleanBody", Set(junk.rows.map(\.agent)).sorted().joined(separator: ", "))
+        a.addButton(withTitle: tr("mac.cleanOk"))
+        a.addButton(withTitle: tr("mac.cancel"))
         if a.runModal() == .alertFirstButtonReturn {
             junk.trashAll()
         }
