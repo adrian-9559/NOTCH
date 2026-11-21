@@ -240,9 +240,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func installHover() {
         hover.zoneProvider = { [weak self] in
-            (notch: self?.notchRect,
-             panel: self?.windowController?.isVisible == true ? self?.windowController?.frame : nil,
-             visible: self?.windowController?.isVisible ?? false)
+            // La zona incluye la píldora de música (más ancha que el
+            // notch): pasar por la carátula o el EQ también abre.
+            var nz = self?.notchRect
+            for pill in self?.lights.visiblePillFrames ?? [] {
+                nz = nz?.union(pill) ?? pill
+            }
+            return (notch: nz,
+                    panel: self?.windowController?.isVisible == true ? self?.windowController?.frame : nil,
+                    visible: self?.windowController?.isVisible ?? false)
         }
         hover.onEnter = { [weak self] in self?.showPanel() }
         hover.onLeave = { [weak self] in self?.hidePanel() }

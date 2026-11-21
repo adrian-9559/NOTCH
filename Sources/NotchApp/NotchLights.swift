@@ -176,6 +176,14 @@ final class NotchLightsController {
         panels = []
     }
 
+    /// Frames en pantalla de las píldoras visibles (vacío si oculta).
+    /// Para que el hover las incluya: la píldora (300 px) es más ancha
+    /// que el notch y los bordes quedarían fuera de la zona.
+    var visiblePillFrames: [NSRect] {
+        guard hasSong, !panelOpen, !toastShowing else { return [] }
+        return panels.map { $0.frame }
+    }
+
     private func makePanel(frame: NSRect, onTap: @escaping () -> Void) -> NSPanel {
         let p = NSPanel(
             contentRect: frame,
