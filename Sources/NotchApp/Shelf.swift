@@ -327,6 +327,19 @@ struct ShelfView: View {
                     Text(tr("shelf.dropSub"))
                         .font(.caption).foregroundStyle(Color.white.opacity(0.45))
                         .fixedSize(horizontal: false, vertical: true)
+                    // Sin nada: las acciones abren el selector y aplican.
+                    if shelf.items.isEmpty {
+                        Text(tr("shelf.pickTip"))
+                            .font(.caption2).foregroundStyle(Color.white.opacity(0.4))
+                        HStack(spacing: 4) {
+                            Button(tr("shelf.airdrop")) { pick(shelf.shareViaAirDrop) }
+                            Button("Zip") { pick(shelf.compress) }
+                            Button("JPG") { pick(shelf.convertToJPG) }
+                            Button("PDF") { pick(shelf.convertToPDF) }
+                        }
+                        .controlSize(.mini)
+                        .buttonStyle(.bordered)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
@@ -356,6 +369,29 @@ struct ShelfView: View {
                 }
             }
             return true
+        }
+    }
+
+    /// Selector de archivos que aplica la acción al momento (para la
+    /// dropzone vacía): elige y sale hecho.
+    private func pick(_ action: @escaping (ShelfItem) -> Void) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        // La app es accessory: traerla al frente o el diálogo queda detrás.
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { resp in
+            guard resp == .OK else { return }
+            let urls = panel.urls
+            DispatchQueue.main.async {
+                shelf.add(urls: urls)
+                for u in urls {
+                    if let item = shelf.items.first(where: { $0.url == u }) {
+                        action(item)
+                    }
+                }
+            }
         }
     }
 }

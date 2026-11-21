@@ -306,7 +306,6 @@ struct StatsView: View {
     /// Secciones plegadas (persisten): menos datos a la vista.
     @AppStorage("macFoldLoads") private var foldLoads = false
     @AppStorage("macFoldServers") private var foldServers = false
-    @AppStorage("macFoldBattery") private var foldBattery = false
     @AppStorage("macFoldJunk") private var foldJunk = false
     /// Proceso desplegado (detalle + terminar).
     @State private var expandedPid: Int32 = 0
@@ -335,7 +334,7 @@ struct StatsView: View {
                           sub: String(format: "%.1f of %.0f GB", snap.memUsedGB, snap.memTotalGB),
                           fraction: memFrac, color: severityColor(fraction: memFrac))
                     .frame(maxWidth: .infinity)
-                batteryMini.frame(maxWidth: .infinity, alignment: .leading)
+                batteryCard.frame(maxWidth: .infinity, alignment: .leading)
             }
             // Presión de memoria + pico del último minuto.
             VStack(alignment: .leading, spacing: 3) {
@@ -422,11 +421,6 @@ struct StatsView: View {
                     }
                 }
             }
-            // Batería extendida en una tarjeta con su logo.
-            sectionHeader(title: tr("mac.battery"), sub: battStateWord, folded: $foldBattery)
-            if !foldBattery {
-                batteryCard
-            }
             // Limpieza de datos temporales de agentes (solo parados).
             JunkSectionView(store: sessions, junk: junk, folded: $foldJunk)
             Text(tr("mac.self", Int(snap.selfCpu.rounded()), Int(snap.selfMB.rounded())))
@@ -470,34 +464,6 @@ struct StatsView: View {
         .buttonStyle(.plain)
     }
 
-    private var batteryMini: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("BATTERY").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
-            HStack(spacing: 6) {
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(0.5), lineWidth: 2)
-                        .frame(width: 40, height: 20)
-                    RoundedRectangle(cornerRadius: 1).fill(Color.white.opacity(0.5)).frame(width: 3, height: 8)
-                        .offset(x: 41)
-                    if let b = snap.battery {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(batteryColor(b))
-                            .frame(width: max(4, 34 * CGFloat(b) / 100), height: 12)
-                            .padding(.leading, 3)
-                        if snap.onAC {
-                            Image(systemName: "bolt.fill").font(.system(size: 9)).foregroundStyle(.black)
-                                .padding(.leading, 8)
-                        }
-                    }
-                }
-                Text(snap.battery.map { "\($0)%" } ?? "—")
-                    .font(.notchMono(16)).foregroundStyle(.white).monospacedDigit()
-            }
-            Text(battStateWord.isEmpty ? tr("mac.noBattery") : battStateWord)
-                .font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5))
-        }
-    }
-
     private func batteryColor(_ level: Int) -> Color {
         if snap.onAC { return Color(hex: "2F9E6E") }
         return severityColor(fraction: 1 - Double(level) / 100)
@@ -537,7 +503,7 @@ struct StatsView: View {
                 }
                 Spacer()
             }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
+            LazyVGrid(columns: [GridItem(.flexible())], spacing: 4) {
                 battCell(tr("mac.health"), battHealthText, battHealthColor)
                 battCell(tr("mac.cycles"), snap.batt.cycles > 0 ? "\(snap.batt.cycles)" : "—", .white.opacity(0.85))
                 battCell(tr("mac.power"), snap.batt.watts == 0 ? "—" : String(format: "%+.0f W", snap.batt.watts), .white.opacity(0.85))
