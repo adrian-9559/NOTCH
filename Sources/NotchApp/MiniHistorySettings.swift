@@ -3,6 +3,8 @@ import NotchCore
 import SwiftUI
 
 // MARK: - Historial: qué hizo cada agente, hora a hora. Día y semana.
+// (La retención es de 90 días: ver `HistoryStore.retentionDays`, la
+// pestaña Actividad calcula tiempos y rachas sobre esa ventana.)
 
 struct HistoryEvent: Codable {
     var ts: Date
@@ -48,17 +50,17 @@ final class HistoryStore: ObservableObject {
             }.joined(separator: "\n") + "\n"
             try? lines.write(to: logFile(), atomically: true, encoding: .utf8)
         }
-        // Ventana en memoria: última semana.
-        let weekAgo = Date().addingTimeInterval(-7 * 86400)
-        events = events.filter { $0.ts > weekAgo }
+        // Ventana en memoria: últimos `retentionDays` (Actividad: mes + rachas).
+        let cutoff = Date().addingTimeInterval(-Double(Self.retentionDays) * 86400)
+        events = events.filter { $0.ts > cutoff }
     }
 
     func load() {
         guard let data = try? Data(contentsOf: logFile()),
               !data.isEmpty else { return }
-        let weekAgo = Date().addingTimeInterval(-7 * 86400)
+        let cutoff = Date().addingTimeInterval(-Double(Self.retentionDays) * 86400)
         events = data.split(separator: UInt8(ascii: "\n")).compactMap { try? JSONDecoder().decode(HistoryEvent.self, from: Data($0)) }
-            .filter { $0.ts > weekAgo }
+            .filter { $0.ts > cutoff }
         for e in events { lastByAgent[e.agent] = e.status }
     }
 
@@ -74,12 +76,13 @@ final class HistoryStore: ObservableObject {
 
 struct HistoryView: View {
     @ObservedObject var store = HistoryStore.shared
+    @ObservedObject private var settings = NotchSettings.shared
     @State private var dayOffset = 0 // 0 hoy, -1 ayer… -6 semana
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(dayOffset == 0 ? "hoy" : dayName).font(.caption).foregroundStyle(.secondary)
+                Text(dayOffset == 0 ? tr("hist.today") : dayName).font(.notchMono(11)).foregroundStyle(.secondary)
                 Spacer()
                 Button("‹") { dayOffset = max(-6, dayOffset - 1) }.controlSize(.small)
                 Button("›") { dayOffset = min(0, dayOffset + 1) }.controlSize(.small)
@@ -87,7 +90,7 @@ struct HistoryView: View {
             .buttonStyle(.bordered)
             let rows = store.hours(for: day)
             if rows.allSatisfy({ $0.count == 0 }) {
-                Text("Sin actividad registrada").font(.caption).foregroundStyle(.secondary)
+                Text(tr("hist.empty")).font(.caption).foregroundStyle(.secondary)
             } else {
                 ForEach(rows.filter { $0.count > 0 }, id: \.hour) { r in
                     HStack(spacing: 6) {
@@ -123,10 +126,16 @@ struct SettingsView: View {
     @State private var autoSend = ReplyService.shared.autoSendEnabled
     @State private var trustState = ReplyService.shared.isTrusted
     @State private var vaultPath: String = UserDefaults.standard.string(forKey: "notchObsidianVault") ?? ""
+    @State private var hoverOpen = UserDefaults.standard.object(forKey: "notchHoverOpen") as? Bool ?? true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("ajustes").font(.caption).foregroundStyle(.secondary)
+            Toggle("Abrir al pasar el ratón por el notch", isOn: $hoverOpen)
+                .font(.callout)
+                .onChange(of: hoverOpen) { v in
+                    UserDefaults.standard.set(v, forKey: "notchHoverOpen")
+                }
             Toggle("Auto-send en Claude (Accessibility)", isOn: $autoSend)
                 .font(.callout)
                 .onChange(of: autoSend) { v in

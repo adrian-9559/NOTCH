@@ -16,7 +16,6 @@ Sources/NotchApp/       # App AppKit/SwiftUI (solo macOS 14+)
   SessionStore.swift    # Fuente de verdad ObservableObject
   NotchWindow.swift     # NSPanel flotante + controlador
   NotchRootView.swift   # Luces + tarjetas waiting (callbacks inyectados)
-  PixelOffice.swift     # Oficina Canvas
   Shelf.swift           # ShelfStore + HandoffService + vistas + screenshots
   ReplyService.swift    # Allow/reply/open (iTerm → AX → clipboard)
   OfficeHotKey.swift    # Doble-tap ⌘ derecha
