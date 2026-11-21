@@ -73,25 +73,87 @@ struct QuickNoteView: View {
     @ObservedObject private var settings = NotchSettings.shared
     @State private var text = ""
     @State private var vaultPath: String = UserDefaults.standard.string(forKey: "notchObsidianVault") ?? ""
+    @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(tr("note.hint")).font(.notchMono(11)).foregroundStyle(.secondary)
-            TextField(tr("note.ph"), text: $text, onCommit: {
-                store.save(text); text = ""
-            })
-            .textFieldStyle(.roundedBorder)
-            HStack {
-                Button(tr("note.save")) { store.save(text); text = "" }.buttonStyle(NotchPrimaryButton(size: .small))
-                Button(tr("note.toNotes")) { store.saveToAppleNotes(text); text = "" }.buttonStyle(NotchGhostButton(size: .small))
-                Text(store.lastSaved).font(.caption2).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(settings.accent)
+                Text(tr("note.hint"))
+                    .font(.notchMono(10))
+                    .foregroundStyle(.secondary)
+                    .kerning(1.2)
+                Spacer()
+                if !store.lastSaved.isEmpty {
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.green)
+                        Text(store.lastSaved)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .transition(.opacity)
+                }
             }
-            TextField(tr("note.vaultPh"), text: $vaultPath, onCommit: {
-                UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
-            })
-            .textFieldStyle(.roundedBorder).font(.caption)
+            // Entrada estilo barra de comandos.
+            HStack(spacing: 8) {
+                TextField(tr("note.ph"), text: $text, onCommit: { save() })
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .focused($focused)
+                    .onSubmit(save)
+                if !text.isEmpty {
+                    Button { save() } label: {
+                        Image(systemName: "return")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 26, height: 26)
+                            .background(Circle().fill(settings.accent))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(focused ? settings.accent.opacity(0.6) : Color.white.opacity(0.09), lineWidth: 1)
+            )
+            .animation(.snappy(duration: 0.2), value: focused)
+            HStack(spacing: 6) {
+                Button(tr("note.save")) { save() }
+                    .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button(tr("note.toNotes")) { store.saveToAppleNotes(text); text = "" }
+                    .buttonStyle(NotchGhostButton(size: .small))
+                Spacer()
+            }
+            // Destino Obsidian en una fila con icono.
+            HStack(spacing: 8) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .frame(width: 22)
+                TextField(tr("note.vaultPh"), text: $vaultPath, onCommit: {
+                    UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
+                })
+                .textFieldStyle(.plain)
+                .font(.caption)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.03)))
         }
         .padding(8)
+    }
+
+    private func save() {
+        store.save(text); text = ""
     }
 }
 

@@ -97,28 +97,75 @@ struct HistoryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(dayOffset == 0 ? tr("hist.today") : dayName).font(.notchMono(11)).foregroundStyle(.secondary)
+            // Navegación por días con píldoras.
+            HStack(spacing: 6) {
+                Text(dayOffset == 0 ? tr("hist.today") : dayName)
+                    .font(.notchMono(11))
+                    .foregroundStyle(.secondary)
                 Spacer()
-                Button("‹") { dayOffset = max(-6, dayOffset - 1) }.buttonStyle(NotchGhostButton(size: .small))
-                Button("›") { dayOffset = min(0, dayOffset + 1) }.buttonStyle(NotchGhostButton(size: .small))
+                Button { dayOffset = max(-6, dayOffset - 1) } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(NotchGhostButton(size: .mini))
+                Button { dayOffset = min(0, dayOffset + 1) } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(NotchGhostButton(size: .mini))
             }
             let rows = store.hours(for: day)
             if rows.allSatisfy({ $0.count == 0 }) {
-                Text(tr("hist.empty")).font(.caption).foregroundStyle(.secondary)
+                Text(tr("hist.empty"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
             } else {
-                ForEach(rows.filter { $0.count > 0 }, id: \.hour) { r in
-                    HStack(spacing: 6) {
-                        Text(String(format: "%02d", r.hour)).font(.caption2).monospacedDigit().frame(width: 22)
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 3).fill(Color.gray.opacity(0.2)).frame(height: 10)
-                            RoundedRectangle(cornerRadius: 3).fill(Color.accentColor)
-                                .frame(width: max(8, CGFloat(min(r.count, 12)) * 12), height: 10)
+                // Línea temporal: punto por hora con actividad.
+                VStack(spacing: 0) {
+                    ForEach(rows.filter { $0.count > 0 }, id: \.hour) { r in
+                        HStack(spacing: 8) {
+                            Text(String(format: "%02d", r.hour))
+                                .font(.notchMono(10))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                                .frame(width: 24, alignment: .trailing)
+                            Circle()
+                                .fill(settings.accent)
+                                .frame(width: 7, height: 7)
+                                .shadow(color: settings.accent.opacity(0.6), radius: 3)
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.08)).frame(height: 8)
+                                Capsule()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [settings.accent, settings.accent.opacity(0.5)],
+                                            startPoint: .leading, endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: max(10, CGFloat(min(r.count, 12)) * 11), height: 8)
+                            }
+                            .frame(maxWidth: 140)
+                            Text(r.agents.joined(separator: " · "))
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.75))
+                                .lineLimit(1)
                         }
-                        .frame(width: 150)
-                        Text(r.agents.joined(separator: ", ")).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        .padding(.vertical, 4)
                     }
                 }
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.03))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.white.opacity(0.07), lineWidth: 1)
+                )
             }
         }
         .padding(8)

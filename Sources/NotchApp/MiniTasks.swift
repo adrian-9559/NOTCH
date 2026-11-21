@@ -213,13 +213,28 @@ struct TasksView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(tr("task.title")).font(.notchMono(11)).foregroundStyle(.secondary)
+            // Cabecera de misión: título + abiertas + hoy + auto + añadir.
+            HStack(spacing: 8) {
+                Text(tr("task.title"))
+                    .font(.notchMono(11))
+                    .foregroundStyle(.secondary)
                 if tasks.openCount > 0 {
                     Text(tr("task.open", tasks.openCount))
                         .font(.notchMono(10)).foregroundStyle(settings.accent)
-                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Capsule().fill(settings.accent.opacity(0.15)))
+                        .monospacedDigit()
+                }
+                if tasks.doneToday > 0 {
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 9)).foregroundStyle(Color(hex: "2F9E6E"))
+                        Text("\(tasks.doneToday)")
+                            .font(.notchMono(10)).foregroundStyle(.white.opacity(0.7))
+                            .monospacedDigit()
+                    }
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(Capsule().fill(Color.white.opacity(0.07)))
                 }
                 Spacer()
                 Toggle(tr("task.auto"), isOn: $settings.autoSendTasks)
@@ -230,6 +245,7 @@ struct TasksView: View {
                 } label: {
                     Image(systemName: showAdd ? "xmark" : "plus")
                         .font(.system(size: 11, weight: .bold))
+                        .frame(width: 24, height: 24)
                 }
                 .buttonStyle(NotchGhostButton(size: .small))
             }
@@ -239,13 +255,13 @@ struct TasksView: View {
             if showAdd {
                 addForm
             }
-            HStack(spacing: 4) {
+            // Filtros: estado + agente.
+            HStack(spacing: 6) {
                 NotchSegments(
                     selection: $filterRaw,
                     options: [(nil, tr("task.all")), ("todo", tr("task.todo")), ("doing", tr("task.doing")), ("done", tr("task.done"))],
                     color: settings.accent
                 )
-                .frame(maxWidth: 300)
                 Spacer()
                 Menu(agentFilterRaw.flatMap({ AgentID(rawValue: $0)?.displayName }) ?? tr("task.anyone")) {
                     Button(tr("task.anyone")) { agentFilterRaw = nil }
@@ -256,10 +272,15 @@ struct TasksView: View {
                 .controlSize(.mini)
             }
             if shown.isEmpty {
-                Text(filterRaw == nil && agentFilterRaw == nil ? tr("task.empty") : tr("act.empty"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 8)
+                VStack(spacing: 4) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.white.opacity(0.25))
+                    Text(filterRaw == nil && agentFilterRaw == nil ? tr("task.empty") : tr("act.empty"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 14)
             } else {
                 ForEach(shown) { task in
                     TaskRow(
@@ -275,12 +296,20 @@ struct TasksView: View {
     }
 
     private var addForm: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            TextField(tr("task.titlePh"), text: $title)
-                .textFieldStyle(.roundedBorder).font(.callout)
-            TextField(tr("task.detailPh"), text: $detail)
-                .textFieldStyle(.roundedBorder).font(.caption)
-            HStack {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(settings.accent)
+                TextField(tr("task.titlePh"), text: $title, onCommit: add)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+            }
+            TextField(tr("task.detailPh"), text: $detail, onCommit: add)
+                .textFieldStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(Color.white.opacity(0.75))
+            HStack(spacing: 8) {
                 Menu(agentRaw.flatMap({ AgentID(rawValue: $0)?.displayName }) ?? tr("task.anyone")) {
                     Button(tr("task.anyone")) { agentRaw = nil }
                     ForEach(AgentID.allCases, id: \.self) { a in
@@ -293,25 +322,33 @@ struct TasksView: View {
                     options: [(TaskPriority.low, tr("task.low")), (.normal, tr("task.normal")), (.high, tr("task.high"))],
                     color: settings.accent
                 )
-                .frame(maxWidth: 220)
                 Spacer()
-                Button(tr("task.add")) {
-                    guard let created = tasks.add(title: title, detail: detail,
-                                 agent: agentRaw.flatMap(AgentID.init(rawValue:)),
-                                 priority: priority) else { return }
-                    resetForm()
-                    showAdd = false
-                    tasks.lastError = ""
-                    if settings.autoSendTasks, let ss = sessions {
-                        TaskDispatcher.send(created, via: ss, store: tasks)
-                    }
-                }
-                .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
-                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button(tr("task.add"), action: add)
+                    .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.05)))
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(settings.accent.opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    private func add() {
+        guard let created = tasks.add(title: title, detail: detail,
+                     agent: agentRaw.flatMap(AgentID.init(rawValue:)),
+                     priority: priority) else { return }
+        resetForm()
+        showAdd = false
+        tasks.lastError = ""
+        if settings.autoSendTasks, let ss = sessions {
+            TaskDispatcher.send(created, via: ss, store: tasks)
+        }
     }
 
     private func resetForm() {
@@ -330,73 +367,115 @@ private struct TaskRow: View {
     var onToggleExpand: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Button { advance() } label: {
-                    Image(systemName: statusIcon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(statusColor)
-                        .frame(width: 22, height: 22)
-                }
-                .buttonStyle(.plain)
-                .help(statusHelp)
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        if task.priority == .high {
-                            Circle().fill(Color(hex: "E0574B")).frame(width: 6, height: 6)
-                        }
+        HStack(alignment: .top, spacing: 0) {
+            // Carril de prioridad: color según urgencia.
+            RoundedRectangle(cornerRadius: 2)
+                .fill(priorityColor)
+                .frame(width: 3)
+                .padding(.vertical, 8)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Button { advance() } label: {
+                        Image(systemName: statusIcon)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(statusColor)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .help(statusHelp)
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(task.title)
-                            .font(.callout).foregroundStyle(task.status == .done ? Color.white.opacity(0.5) : Color.white)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(task.status == .done ? Color.white.opacity(0.45) : Color.white.opacity(0.92))
                             .strikethrough(task.status == .done)
                             .lineLimit(1)
-                    }
-                    if let agent = task.agent {
-                        Text(agent.displayName)
-                            .font(.caption2).foregroundStyle(settings.accent)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
-                Button { onToggleExpand() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.white.opacity(0.4))
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                }
-                .buttonStyle(.plain)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onToggleExpand)
-            if expanded {
-                if !task.detail.isEmpty {
-                    Text(task.detail).font(.caption).foregroundStyle(Color.white.opacity(0.75))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                HStack(spacing: 3) {
-                    Text(statusLine).font(.caption2).foregroundStyle(.secondary)
-                    Spacer()
-                    if task.isOpen, sessions != nil {
-                        Button(tr("task.send")) {
-                            if let ss = sessions {
-                                TaskDispatcher.send(task, via: ss, store: store)
+                        HStack(spacing: 5) {
+                            if let agent = task.agent {
+                                Text(agent.displayName.uppercased())
+                                    .font(.notchMono(8))
+                                    .foregroundStyle(settings.accent)
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(Capsule().fill(settings.accent.opacity(0.14)))
                             }
-                        }.buttonStyle(NotchPrimaryButton(size: .mini, color: settings.accent))
+                            Text(statusLine)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
-                    Button(tr("task.up")) { move(-1) }.buttonStyle(NotchGhostButton(size: .mini))
-                    Button(tr("task.down")) { move(1) }.buttonStyle(NotchGhostButton(size: .mini))
-                    Button(task.status == .archived ? tr("task.unarchive") : tr("task.archive")) {
-                        var t = task
-                        t.status = t.status == .archived ? .todo : .archived
-                        store.update(t)
-                    }.buttonStyle(NotchGhostButton(size: .mini))
-                    Button(tr("task.delete")) { store.remove(task) }
-                        .buttonStyle(NotchGhostButton(size: .mini, tint: Color(hex: "E0574B")))
+                    Spacer()
+                    Button { onToggleExpand() } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                            .frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .font(.caption)
+                if expanded {
+                    if !task.detail.isEmpty {
+                        Text(task.detail)
+                            .font(.caption)
+                            .foregroundStyle(Color.white.opacity(0.75))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.leading, 32)
+                    }
+                    HStack(spacing: 4) {
+                        Spacer()
+                        if task.isOpen, sessions != nil {
+                            Button { if let ss = sessions { TaskDispatcher.send(task, via: ss, store: store) } } label: {
+                                Label(tr("task.send"), systemImage: "paperplane.fill")
+                            }
+                            .buttonStyle(NotchPrimaryButton(size: .mini, color: settings.accent))
+                            .help(tr("task.send"))
+                        }
+                        Button { move(-1) } label: {
+                            Image(systemName: "chevron.up").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 22)
+                        }
+                        .buttonStyle(NotchGhostButton(size: .mini))
+                        .help(tr("task.up"))
+                        Button { move(1) } label: {
+                            Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 22)
+                        }
+                        .buttonStyle(NotchGhostButton(size: .mini))
+                        .help(tr("task.down"))
+                        Button {
+                            var t = task
+                            t.status = t.status == .archived ? .todo : .archived
+                            store.update(t)
+                        } label: {
+                            Image(systemName: "archivebox").font(.system(size: 10)).frame(width: 24, height: 22)
+                        }
+                        .buttonStyle(NotchGhostButton(size: .mini))
+                        .help(task.status == .archived ? tr("task.unarchive") : tr("task.archive"))
+                        Button { store.remove(task) } label: {
+                            Image(systemName: "trash").font(.system(size: 10)).frame(width: 24, height: 22)
+                        }
+                        .buttonStyle(NotchGhostButton(size: .mini, tint: Color(hex: "E0574B")))
+                        .help(tr("task.delete"))
+                    }
+                }
             }
+            .padding(.leading, 6)
         }
         .padding(.horizontal, 8).padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.045)))
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(task.status == .done ? Color.white.opacity(0.025) : Color.white.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(task.isOpen ? Color.white.opacity(0.08) : Color.clear, lineWidth: 1)
+        )
+    }
+
+    private var priorityColor: Color {
+        switch task.priority {
+        case .high: return Color(hex: "E0574B")
+        case .normal: return settings.accent.opacity(task.isOpen ? 0.8 : 0.3)
+        case .low: return Color.white.opacity(0.25)
+        }
     }
 
     private var statusIcon: String {

@@ -108,89 +108,143 @@ struct ActivityView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Selector de rango propio.
             NotchSegments(
                 selection: $range,
                 options: [(0, tr("act.day")), (1, tr("act.week")), (2, tr("act.month"))],
                 color: settings.accent
             )
+            .frame(maxWidth: 260)
 
             let rows = store.activeSecondsPerAgent(since: since)
             let total = rows.reduce(0.0) { $0 + $1.seconds }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(formatActive(total))
-                    .font(.notchMono(22))
-                    .foregroundStyle(.white)
-                Text(range == 0 ? tr("act.today") : range == 1 ? tr("act.days7") : tr("act.days30"))
-                    .font(.notchMono(11))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                HStack(spacing: 3) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.orange)
-                    Text(tr("act.streak", store.currentStreak()))
-                        .font(.notchMono(11))
-                        .foregroundStyle(.white.opacity(0.85))
+
+            // Cabecera: total grande + racha.
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(formatActive(total))
+                        .font(.notchMono(30))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                    Text(range == 0 ? tr("act.today") : range == 1 ? tr("act.days7") : tr("act.days30"))
+                        .font(.notchMono(10))
+                        .foregroundStyle(Color.white.opacity(0.45))
                 }
-                .help(tr("act.best", store.bestStreak()))
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.orange)
+                        Text("\(store.currentStreak())")
+                            .font(.notchMono(18))
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+                    }
+                    Text(tr("act.best", store.bestStreak()))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .padding(12)
+            .background(actCard)
 
             if rows.isEmpty {
                 Text(tr("act.empty"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 10)
             } else {
+                // Clasificación por agente con barra proporcional.
                 let top = max(rows[0].seconds, 1)
-                ForEach(rows.prefix(8), id: \.agent) { r in
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(agentColor(for: r.agent, default: settings.accent))
-                            .frame(width: 7, height: 7)
-                        Text(r.agent)
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.85))
-                            .lineLimit(1)
-                        Spacer()
-                        Text(formatActive(r.seconds))
-                            .font(.notchMono(10))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.prefix(8).enumerated()), id: \.element.agent) { i, r in
+                        HStack(spacing: 8) {
+                            Text(verbatim: "\(i + 1)")
+                                .font(.notchMono(10))
+                                .foregroundStyle(Color.white.opacity(0.35))
+                                .frame(width: 12, alignment: .trailing)
+                                .monospacedDigit()
+                            Circle()
+                                .fill(agentColor(for: r.agent, default: settings.accent))
+                                .frame(width: 8, height: 8)
+                            Text(r.agent)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.9))
+                                .lineLimit(1)
+                            Spacer()
+                            Text(formatActive(r.seconds))
+                                .font(.notchMono(11))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        .padding(.vertical, 6)
+                        .background(
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(agentColor(for: r.agent, default: settings.accent).opacity(0.16))
+                                        .frame(width: geo.size.width * CGFloat(r.seconds / top), height: 3)
+                                }
+                                .frame(maxHeight: .infinity, alignment: .bottom)
+                                .offset(y: 8)
+                            }
+                        )
                     }
-                    .overlay(alignment: .bottomLeading) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(agentColor(for: r.agent, default: settings.accent).opacity(0.7))
-                            .frame(width: 120 * CGFloat(r.seconds / top), height: 3)
-                            .offset(y: 4)
-                    }
-                    .padding(.bottom, 4)
                 }
+                .padding(.horizontal, 12).padding(.vertical, 4)
+                .background(actCard)
             }
 
-            // Últimos 7 días: minibarras para ver el ritmo de un vistazo.
+            // Semana: 7 columnas con letra del día.
             let week = store.secondsPerDay(last: 7)
             if week.contains(where: { $0.seconds > 0 }) {
-                HStack(alignment: .bottom, spacing: 5) {
-                    ForEach(week.indices.reversed(), id: \.self) { i in
-                        let v = week[i].seconds
-                        let peak = max(week.map(\.seconds).max() ?? 1, 1)
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(settings.accent.opacity(v > 0 ? 0.85 : 0.2))
-                            .frame(width: 14, height: max(4, 34 * CGFloat(v / peak)))
+                let peak = max(week.map(\.seconds).max() ?? 1, 1)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .bottom, spacing: 6) {
+                        ForEach(week.indices.reversed(), id: \.self) { i in
+                            let v = week[i].seconds
+                            let isToday = Calendar.current.isDateInToday(week[i].day)
+                            VStack(spacing: 3) {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(isToday ? settings.accent : settings.accent.opacity(v > 0 ? 0.55 : 0.15))
+                                    .frame(width: 18, height: max(5, 40 * CGFloat(v / peak)))
+                                Text(dayLetter(week[i].day))
+                                    .font(.notchMono(8))
+                                    .foregroundStyle(isToday ? settings.accent : Color.white.opacity(0.4))
+                            }
+                            .frame(maxWidth: .infinity)
                             .help("\(dayLabel(week[i].day)): \(formatActive(v))")
+                        }
                     }
-                    Spacer()
                     if let best = week.max(by: { $0.seconds < $1.seconds }), best.seconds > 0 {
                         Text(tr("act.bestDay", dayLabel(best.day), formatActive(best.seconds)))
                             .font(.notchMono(9))
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.top, 2)
+                .padding(12)
+                .background(actCard)
             }
         }
         .padding(8)
         .onAppear { store.load() }
+    }
+
+    private var actCard: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.white.opacity(0.045))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+    }
+
+    private func dayLetter(_ d: Date) -> String {
+        let f = DateFormatter(); f.locale = .current; f.dateFormat = "EEEEE"
+        return f.string(from: d)
     }
 
     private func dayLabel(_ d: Date) -> String {
