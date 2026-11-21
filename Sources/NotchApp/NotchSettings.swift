@@ -68,6 +68,18 @@ final class NotchSettings: ObservableObject {
     @Published var musicSource: String {
         didSet { save() }
     }
+    /// Atajo global del portapapeles (doble ⌘ derecho).
+    @Published var clipHotkeyEnabled: Bool {
+        didSet { save() }
+    }
+    /// Pegar directo al elegir clip (requiere Accesibilidad).
+    @Published var clipAutoPaste: Bool {
+        didSet { save() }
+    }
+    /// Clips guardados en memoria.
+    @Published var clipMax: Double {
+        didSet { save() }
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -100,6 +112,9 @@ final class NotchSettings: ObservableObject {
         historyDays = d.object(forKey: "notchHistoryDays") as? Double ?? 90
         let ms = d.string(forKey: "notchMusicSource") ?? "auto"
         musicSource = ["auto", "Music", "Spotify"].contains(ms) ? ms : "auto"
+        clipHotkeyEnabled = d.object(forKey: "notchClipHotkey") as? Bool ?? true
+        clipAutoPaste = d.object(forKey: "notchClipAutoPaste") as? Bool ?? false
+        clipMax = d.object(forKey: "notchClipMax") as? Double ?? 30
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
     }
@@ -145,6 +160,9 @@ final class NotchSettings: ObservableObject {
         d.set(waitToastSeconds, forKey: "notchWaitToastSecs")
         d.set(historyDays, forKey: "notchHistoryDays")
         d.set(musicSource, forKey: "notchMusicSource")
+        d.set(clipHotkeyEnabled, forKey: "notchClipHotkey")
+        d.set(clipAutoPaste, forKey: "notchClipAutoPaste")
+        d.set(clipMax, forKey: "notchClipMax")
     }
 }
 #endif

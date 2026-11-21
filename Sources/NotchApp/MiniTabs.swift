@@ -13,6 +13,8 @@ final class NotchContext {
     let quickNote = QuickNoteStore()
     let music = MusicStore()
     let tasks = TaskStore()
+    /// Portapapeles local (solo memoria), lo arranca AppDelegate.
+    let clips = ClipStore()
     /// Hover de la navbar por polling (bocadillo), lo alimenta NotchUI.
     let navHover = NavHoverStore()
 }
@@ -38,7 +40,7 @@ enum MiniTabs {
                 (title: NotchTab.notes.rawValue, view: AnyView(VStack(spacing: 0) {
                     QuickNoteView(store: ctx.quickNote)
                     Divider()
-                    HistoryView()
+                    ClipboardView(store: ctx.clips)
                 })),
                 (title: NotchTab.tasks.rawValue, view: AnyView(TasksView(tasks: ctx.tasks, sessions: store))),
                 // La ⚙ ya no es pestaña: abre el modal SettingsWindowController

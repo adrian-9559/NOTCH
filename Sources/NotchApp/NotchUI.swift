@@ -46,6 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hover = NotchHoverController()
     /// Poll del bocadillo de navbar (las tracking areas no llegan aquí).
     private var navPoll: Timer?
+    /// Atajo global del portapapeles (doble ⌘ derecho).
+    private var clipHotKey = ClipHotKey()
     private var notchAnchorX: CGFloat?
     private var notchTopY: CGFloat?
     private var notchWidth: CGFloat?
@@ -75,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installOfficeHotKey()
         installHover()
         installNavHover()
+        installClipboard()
 
         NotificationCenter.default.addObserver(
             self,
@@ -358,6 +361,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 store.tab = hit
             }
         }
+    }
+
+    /// Portapapeles: vigila en memoria + atajo global Win+V.
+    private func installClipboard() {
+        NotchContext.shared.clips.start()
+        clipHotKey.onFire = { [weak self] in
+            guard NotchSettings.shared.clipHotkeyEnabled else { return }
+            self?.toggleClipboard()
+        }
+        clipHotKey.start()
+    }
+
+    private func toggleClipboard() {
+        ClipPopupCenter.shared.toggle(store: NotchContext.shared.clips)
     }
 
     /// Menú del icono (se reconstruye al cambiar el idioma).

@@ -43,7 +43,7 @@ final class SettingsWindowController: NSObject {
 
 /// Páginas del sidebar.
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case appearance, tabs, behavior, music, data, language, about
+    case appearance, tabs, behavior, music, clipboard, data, language, about
     var id: String { rawValue }
 
     var icon: String {
@@ -52,6 +52,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .tabs: return "menubar.rectangle"
         case .behavior: return "cursorarrow.click.2"
         case .music: return "music.note"
+        case .clipboard: return "clipboard.fill"
         case .data: return "externaldrive.fill"
         case .language: return "globe"
         case .about: return "lock.fill"
@@ -64,6 +65,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .tabs: return "set.navbar"
         case .behavior: return "set.behavior"
         case .music: return "set.music"
+        case .clipboard: return "set.clipboard"
         case .data: return "set.data"
         case .language: return "set.language"
         case .about: return "set.privacy"
@@ -202,6 +204,7 @@ struct SettingsModalView: View {
                     case .tabs: tabsPage
                     case .behavior: behaviorPage
                     case .music: musicPage
+                    case .clipboard: clipboardPage
                     case .data: dataPage
                     case .language: languagePage
                     case .about: aboutPage
@@ -442,6 +445,49 @@ struct SettingsModalView: View {
                     settings.musicSource = "Spotify"
                 }
             }
+        }
+    }
+
+    // MARK: - Portapapeles
+
+    private var clipboardPage: some View {
+        VStack(spacing: 12) {
+            SettingsCard(label: tr("set.clipboard"), icon: "clipboard.fill", accent: settings.accent) {
+                VStack(spacing: 2) {
+                    IconToggleRow(icon: "command", label: tr("set.clipHotkey"), subtitle: tr("set.clipHotkeySub"), isOn: $settings.clipHotkeyEnabled, accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    IconToggleRow(icon: "doc.on.clipboard.fill", label: tr("set.clipAutoPaste"), subtitle: tr("set.clipAutoPasteSub"), isOn: $settings.clipAutoPaste, accent: settings.accent) {
+                        if settings.clipAutoPaste, !ReplyService.shared.isTrusted {
+                            ReplyService.shared.requestTrust()
+                        }
+                        trustState = ReplyService.shared.isTrusted
+                    }
+                    HStack {
+                        Circle().fill(trustState ? Color.green : Color.orange).frame(width: 7, height: 7)
+                        Text(trustState ? tr("set.trustOk") : tr("set.trustPending"))
+                            .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.5))
+                        Spacer()
+                    }
+                    Divider().background(Color.white.opacity(0.07))
+                    DurationRow(label: tr("set.clipMax"), value: $settings.clipMax, range: 10...100, step: 5, accent: settings.accent, suffix: "")
+                    Divider().background(Color.white.opacity(0.07))
+                    HStack {
+                        Text(tr("set.inputMon"))
+                            .font(.caption2)
+                            .foregroundStyle(Color.white.opacity(0.5))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button(tr("set.openSettings")) { openPrivacySettings() }
+                            .controlSize(.small).buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
+                    }
+                }
+            }
+        }
+    }
+
+    private func openPrivacySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") {
+            NSWorkspace.shared.open(url)
         }
     }
 
