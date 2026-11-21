@@ -38,6 +38,28 @@ final class ShelfStore: ObservableObject {
         items.removeAll { $0.id == item.id }
     }
 
+    /// Como Lumio ("kept for a day"): lo que lleva 24 h se retira solo.
+    /// El original nunca se toca: solo sale de la estantería.
+    static let keepHours: TimeInterval = 24 * 3600
+
+    func purgeExpired() {
+        let cutoff = Date().addingTimeInterval(-Self.keepHours)
+        let n = items.count
+        items.removeAll { $0.addedAt < cutoff }
+        if items.count != n {
+            lastAction = "Retirados \(n - items.count) de ayer"
+        }
+    }
+
+    /// Cuánto le queda en la estantería ("se borra en 5h").
+    func remaining(_ item: ShelfItem) -> String {
+        let left = item.addedAt.addingTimeInterval(Self.keepHours).timeIntervalSince(Date())
+        guard left > 0 else { return "retirando…" }
+        let h = Int(left) / 3600
+        if h > 0 { return "se borra en \(h)h" }
+        return "se borra en \(Int(left) / 60)m"
+    }
+
     // MARK: - Screenshots automáticos
 
     private func screenshotDirs() -> [URL] {
@@ -92,6 +114,7 @@ final class ShelfStore: ObservableObject {
     }
 
     private func collectNewScreenshots() {
+        purgeExpired()
         for u in currentScreenshots() where !knownScreenshots.contains(u.path) {
             knownScreenshots.insert(u.path)
             // Solo las recientes (últimos 60s) entran solas.
@@ -235,7 +258,45 @@ extension Notification.Name {
     static let notchPrefillReply = Notification.Name("notchPrefillReply")
 }
 
-// MARK: - Vista
+// MARK: - Vista estilo Lumio: dropzone punteada + kept for a day
+
+/// Personaje de pie junto a la dropzone, como el de Lumio.
+struct ShelfBuddy: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            // Cabeza + pelo.
+            ZStack {
+                RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.85, green: 0.68, blue: 0.55)).frame(width: 22, height: 22)
+                RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.3, green: 0.2, blue: 0.12)).frame(width: 24, height: 10).offset(y: -7)
+                // Ojos.
+                HStack(spacing: 6) {
+                    Circle().fill(Color.black).frame(width: 2.5, height: 2.5)
+                    Circle().fill(Color.black).frame(width: 2.5, height: 2.5)
+                }
+                .offset(y: 1)
+            }
+            // Cazadora negra + camisa.
+            ZStack {
+                RoundedRectangle(cornerRadius: 5).fill(Color(red: 0.12, green: 0.12, blue: 0.14)).frame(width: 34, height: 40)
+                RoundedRectangle(cornerRadius: 2).fill(Color.white).frame(width: 10, height: 30)
+                // Brazos.
+                HStack(spacing: 30) {
+                    RoundedRectangle(cornerRadius: 3).fill(Color(red: 0.12, green: 0.12, blue: 0.14)).frame(width: 8, height: 34)
+                    RoundedRectangle(cornerRadius: 3).fill(Color(red: 0.12, green: 0.12, blue: 0.14)).frame(width: 8, height: 34)
+                }
+            }
+            // Vaqueros + zapatos.
+            HStack(spacing: 3) {
+                RoundedRectangle(cornerRadius: 3).fill(Color(red: 0.2, green: 0.3, blue: 0.5)).frame(width: 11, height: 34)
+                RoundedRectangle(cornerRadius: 3).fill(Color(red: 0.2, green: 0.3, blue: 0.5)).frame(width: 11, height: 34)
+            }
+            HStack(spacing: 3) {
+                RoundedRectangle(cornerRadius: 2).fill(Color.black).frame(width: 13, height: 6)
+                RoundedRectangle(cornerRadius: 2).fill(Color.black).frame(width: 13, height: 6)
+            }
+        }
+    }
+}
 
 struct ShelfView: View {
     @ObservedObject var store: SessionStore
@@ -247,21 +308,46 @@ struct ShelfView: View {
             HStack {
                 Text("shelf").font(.notchMono(11)).foregroundStyle(.secondary)
                 Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "tray").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("kept for a day").font(.notchMono(10)).foregroundStyle(.secondary)
+                }
+                .help("Lo que lleva 24 h se retira solo (el original no se toca)")
+            }
+            HStack(alignment: .bottom, spacing: 10) {
+                ShelfBuddy()
+                // Dropzone punteada verde, como Lumio.
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "basket").font(.system(size: 13)).foregroundStyle(Color(hex: "2F9E6E"))
+                        Text("Arrastra un archivo al notch")
+                            .font(.notchMono(12)).foregroundStyle(.white)
+                    }
+                    Text("AirDrop, comprimir, a JPG — o consérvalo hasta mañana.")
+                        .font(.caption).foregroundStyle(Color.white.opacity(0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(isTargeted ? Color(hex: "2F9E6E").opacity(0.18) : Color.white.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color(hex: "2F9E6E").opacity(isTargeted ? 0.9 : 0.5),
+                                      style: StrokeStyle(lineWidth: 1.5, dash: [7, 5]))
+                )
+            }
+            if !shelf.lastAction.isEmpty {
                 Text(shelf.lastAction).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
-            if shelf.items.isEmpty {
-                Text("Arrastra un archivo al notch")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 60)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.25)))
-            } else {
-                ForEach(shelf.items) { item in
-                    ShelfRow(item: item, store: store, shelf: shelf)
-                }
+            ForEach(shelf.items) { item in
+                ShelfRow(item: item, store: store, shelf: shelf)
             }
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 12).fill(isTargeted ? Color.blue.opacity(0.15) : Color.gray.opacity(0.2)))
+        .onAppear { shelf.purgeExpired() }
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             for p in providers {
                 _ = p.loadObject(ofClass: URL.self) { url, _ in
@@ -282,35 +368,70 @@ private struct ShelfRow: View {
         store.sessions.filter { $0.status == .working || $0.status == .waiting }
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: item.autoScreenshot ? "camera" : "doc")
-                Text(item.displayName).font(.notchMono(13)).lineLimit(1)
-                Spacer()
-                Button("Ver") { shelf.reveal(item) }.buttonStyle(.link).font(.caption)
-                Button("Borrar") { shelf.remove(item) }.buttonStyle(.link).font(.caption)
-            }
-            HStack {
-                Button("AirDrop") { shelf.shareViaAirDrop(item) }.controlSize(.small)
-                Button("Zip") { shelf.compress(item) }.controlSize(.small)
-                Button("JPG") { shelf.convertToJPG(item) }.controlSize(.small)
-                Button("PDF") { shelf.convertToPDF(item) }.controlSize(.small)
-            }
-            .buttonStyle(.bordered)
-            if !live.isEmpty {
-                HStack {
-                    Text("To agent:").font(.caption).foregroundStyle(.secondary)
-                    ForEach(live, id: \.agent) { s in
-                        Button(s.agent.displayName) { shelf.sendToAgent(item, session: s) }
-                            .controlSize(.small)
-                            .buttonStyle(.borderedProminent)
-                    }
+    /// Miniatura si es imagen; icono del sistema si no.
+    private var thumb: some View {
+        Group {
+            if let img = NSImage(contentsOf: item.url) {
+                Image(nsImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.08))
+                    Image(systemName: "doc")
+                        .font(.system(size: 14)).foregroundStyle(.white.opacity(0.7))
                 }
             }
         }
+        .frame(width: 40, height: 40)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            thumb
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(item.displayName).font(.notchMono(12)).lineLimit(1)
+                    Spacer()
+                    Text(shelf.remaining(item)).font(.caption2).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 4) {
+                    Button("AirDrop") { shelf.shareViaAirDrop(item) }
+                    Button("Zip") { shelf.compress(item) }
+                    Button("JPG") { shelf.convertToJPG(item) }
+                    Button("PDF") { shelf.convertToPDF(item) }
+                }
+                .controlSize(.mini)
+                .buttonStyle(.bordered)
+                HStack(spacing: 4) {
+                    Button("Ver") { shelf.reveal(item) }
+                    Button("Path") {
+                        let pb = NSPasteboard.general
+                        pb.clearContents()
+                        pb.setString(item.url.path, forType: .string)
+                        shelf.lastAction = "Path copiado"
+                    }
+                    Button("Borrar") { shelf.remove(item) }
+                    if !live.isEmpty {
+                        Menu("To agent") {
+                            ForEach(live, id: \.agent) { s in
+                                Button(s.agent.displayName) { shelf.sendToAgent(item, session: s) }
+                            }
+                        }
+                    }
+                }
+                .controlSize(.mini)
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+        }
         .padding(6)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.background))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.background))
     }
 }
 #endif
