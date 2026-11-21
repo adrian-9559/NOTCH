@@ -49,6 +49,8 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
     en Codex/VS Code cae en el campo del notch; en el resto queda copiado
     y solo tienes que pulsar `⌘V` en la ventana del agente.
   - **Abrir**: trae al frente la ventana del agente.
+- **Aviso "ha terminado"**: cuando un agente acaba sale del notch una
+  píldora con su color y qué ha terminado; se oculta sola.
 - **Auto-send (opcional)**: en el modal de Ajustes (`⚙` o `⌘,`) puedes
   activar que la respuesta se envíe sola con Enter. macOS pedirá permiso de
   **Accesibilidad** una sola vez. Sin este permiso, NOTCH copia al portapapeles
@@ -71,9 +73,9 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 
 | Pestaña | Qué hace |
 |---|---|
-| Shelf | Arrastra archivos al panel: quedan en la estantería o caen directo en una sesión viva. Botones por archivo: **To agent** (lo entrega a la sesión que elijas), AirDrop, Zip, JPG, PDF. Las capturas de pantalla entran solas. El original nunca se modifica. |
-| Focus | **Timer** con anillo (avisa para descansar la vista) y **Keep awake** (30m/1h/2h o Auto mientras los agentes trabajan, salvo batería baja). |
-| Mac | **Relojes de uso** (CPU, memoria, batería) con ticks y arco de color de semáforo: verde tranquilo, ámbar ocupado, rojo saturado. Chips con la **carga media 1/5/15** y **qué agente está cargando tu Mac**. |
+| Shelf | Dropzone punteada estilo Lumio (**kept for a day**: lo de 24 h se retira solo, el original no se toca). Por archivo: miniatura, **AirDrop**, **Zip**, **JPG**, **PDF**, Ver, Path y **To agent** (lo entrega a la sesión que elijas). Las capturas entran solas. |
+| Focus | **Timer** con anillo (avisa para descansar la vista) y **Keep awake** configurable: evita el reposo de **Pantalla** y/o el **Salvapantallas**, con 30m, 1h, 2h, 4h, sin fin o **Auto** mientras trabajan (salvo batería baja), con cuenta atrás visible. |
+| Mac | Estilo Lumio: anillos simples de **CPU** (`E·P`), **memoria** (`usada/total`, barra de presión + swap) y **batería**, pico del último minuto, **qué carga el Mac** (top procesos) y **AGENT SERVERS** (puertos en escucha con Open/Stop, mapeados al agente dueño). Abajo, la huella del propio NOTCH. |
 | Actividad | **Tiempo por agente** (día / semana / mes) con barras por agente, minibarras de los últimos 7 días y **racha** de días seguidos con actividad. Todo sale del historial local. |
 | Música | Reproducción estilo Lumio: carátula con vinilo asomando, título, barra de progreso con tiempos y controles ⏮ ⏸ ⏭. **El panel se ilumina con el color de la canción** (extraído de la carátula). Music.app y Spotify. |
 | Notas | **Quick-note**: escribe y Enter. Se guarda en `~/NOTCH-notes/`, en tu daily note de Obsidian (configura el vault) o en Apple Notes. **Historial**: qué hizo cada agente, hora a hora, hoy y últimos 6 días. |
