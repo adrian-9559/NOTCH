@@ -180,6 +180,8 @@ final class MusicStore: ObservableObject {
         duration = r.d
         if changed {
             fetchArtwork(app: r.app)
+            // Aviso estilo Lumio: sale del notch la canción nueva.
+            NotificationCenter.default.post(name: .notchTrackChanged, object: nil)
         }
     }
 
