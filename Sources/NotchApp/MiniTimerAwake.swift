@@ -361,51 +361,124 @@ struct AwakeView: View {
     @ObservedObject var store: AwakeStore
     @ObservedObject private var settings = NotchSettings.shared
     var sessions: SessionStore?
+
+    /// Familia seleccionada: temporizado | sin fin | auto (como Timer|Cronómetro).
+    private var family: Int {
+        if store.mode == "forever" { return 1 }
+        if store.mode == "auto" { return 2 }
+        return 0
+    }
+
+    /// ¿Hay cuenta atrás en marcha?
+    private var timedActive: Bool {
+        store.active && (store.mode == "custom" || ["30m", "1h", "2h", "4h"].contains(store.mode))
+    }
+
+    private var ringTime: String {
+        if timedActive, !store.remainingStr.isEmpty { return store.remainingStr }
+        if store.mode == "forever" { return "∞" }
+        if store.mode == "auto" { return "A" }
+        if store.active { return store.remainingStr.isEmpty ? "∞" : store.remainingStr }
+        return "\(store.customMinutes):00"
+    }
+
+    private var ringTotal: String {
+        switch store.mode {
+        case "forever": return tr("focus.forever")
+        case "auto": return tr("focus.auto")
+        default:
+            if timedActive { return modeLabel }
+            return "\(store.customMinutes) min"
+        }
+    }
+
+    private var modeLabel: String {
+        switch store.mode {
+        case "30m", "1h", "2h", "4h": return store.mode
+        case "custom": return "\(store.customMinutes) min"
+        case "forever": return "∞"
+        case "auto": return tr("focus.auto")
+        default: return tr("focus.off")
+        }
+    }
+
+    /// Minutos del preset correspondiente (30m→30, 1h→60…), para resaltar.
+    private var presetMinutes: Int? {
+        switch store.mode {
+        case "30m": return 30
+        case "1h": return 60
+        case "2h": return 120
+        case "4h": return 240
+        case "custom": return store.customMinutes
+        default: return nil
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(tr("focus.awake")).font(.notchMono(11)).foregroundStyle(.secondary)
-            HStack(alignment: .center, spacing: 10) {
-                // Relojito: progreso de la cuenta atrás + tiempo restante.
-                ZStack {
-                    if let p = store.progress {
-                        ProgressView(value: p)
-                            .progressViewStyle(.circular)
-                            .scaleEffect(1.4)
-                    } else {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .scaleEffect(1.1)
-                            .opacity(store.active ? 1 : 0.35)
-                    }
-                    Text(clockLabel)
-                        .font(.notchMono(9))
-                        .monospacedDigit()
-                }
-                .frame(width: 52, height: 52)
-                VStack(alignment: .leading, spacing: 4) {
-                    // Tiempo ajustable del relojito.
-                    Stepper(tr("focus.min", store.customMinutes), value: $store.customMinutes, in: 15...720, step: 15)
-                        .font(.caption)
-                        .onChange(of: store.customMinutes) { _ in
-                            if store.mode == "custom" { store.set("custom", store: sessions) }
-                        }
-                    HStack(spacing: 4) {
-                        ForEach(["30m", "1h", "2h", "4h"], id: \.self) { key in
-                            chipButton(key, label: key)
-                        }
-                    }
-                    HStack(spacing: 4) {
-                        chipButton("forever", label: "∞")
-                        chipButton("auto", label: tr("focus.auto"))
-                        if store.mode == "off" {
-                            Button(tr("focus.go")) { store.set("custom", store: sessions) }
-                                .controlSize(.mini).buttonStyle(.borderedProminent)
+        VStack(spacing: 8) {
+            // Selector de modo, espejo del Timer|Cronómetro.
+            Picker("", selection: Binding(
+                get: { family },
+                set: { pickFamily($0) }
+            )) {
+                Text(tr("focus.timed")).tag(0)
+                Text("∞").tag(1)
+                Text(tr("focus.auto")).tag(2)
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+            .disabled(store.active && timedActive)
+
+            TimerRing(
+                progress: store.progress ?? (store.active ? 1 : 0),
+                time: ringTime,
+                total: ringTotal,
+                color: settings.accent
+            )
+
+            if family == 0 {
+                // Presets + ajuste fino, igual que el timer.
+                HStack(spacing: 6) {
+                    ForEach([30, 60, 120, 240], id: \.self) { m in
+                        let label = m >= 60 ? "\(m / 60)h" : "\(m)m"
+                        if presetMinutes == m, !store.active {
+                            Button(label) {}.controlSize(.small).buttonStyle(.borderedProminent).disabled(true)
                         } else {
-                            Button(tr("focus.off")) { store.set("off", store: sessions) }
-                                .controlSize(.mini).buttonStyle(.bordered)
+                            Button(label) { store.customMinutes = m }
+                                .controlSize(.small).buttonStyle(.bordered)
+                                .disabled(store.active)
                         }
                     }
-                    .buttonStyle(.bordered)
+                }
+                .tint(settings.accent)
+                Stepper(tr("focus.minutes", store.customMinutes), value: $store.customMinutes, in: 15...720, step: 15)
+                    .font(.caption).disabled(store.active)
+            } else {
+                Text(family == 1 ? tr("focus.forever") : tr("set.autosendSub"))
+                    .font(.caption2).foregroundStyle(Color.white.opacity(0.45))
+                    .lineLimit(2).multilineTextAlignment(.center)
+                    .frame(height: 28)
+            }
+
+            // Controles según estado, como el timer.
+            HStack(spacing: 6) {
+                if !store.active {
+                    Button {
+                        store.set(family == 0 ? "custom" : (family == 1 ? "forever" : "auto"), store: sessions)
+                    } label: {
+                        Label(tr("focus.start"), systemImage: "play.fill")
+                    }
+                    .controlSize(.small).buttonStyle(.borderedProminent)
+                    .tint(settings.accent)
+                } else {
+                    Button(tr("focus.stop")) { store.set("off", store: sessions) }
+                        .controlSize(.small).buttonStyle(.borderedProminent)
+                        .tint(settings.accent)
+                }
+                Spacer()
+                if store.active {
+                    Text(modeLabel)
+                        .font(.notchMono(10)).foregroundStyle(settings.accent)
                 }
             }
             // Qué evitar (a libre elección).
@@ -417,39 +490,23 @@ struct AwakeView: View {
             }
             .font(.caption)
             .toggleStyle(.switch)
+            .tint(settings.accent)
             if store.active {
                 HStack(spacing: 3) {
-                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                    Circle().fill(settings.accent).frame(width: 6, height: 6)
                     Text(store.remainingStr.isEmpty ? tr("focus.awakeOn") : store.remainingStr)
-                        .font(.notchMono(10)).foregroundStyle(.green).monospacedDigit()
+                        .font(.notchMono(10)).foregroundStyle(settings.accent).monospacedDigit()
+                    Spacer()
                 }
             }
         }
         .padding(8)
     }
 
-    private var clockLabel: String {
-        switch store.mode {
-        case "forever": return "∞"
-        case "auto": return "A"
-        case "off": return "zZ"
-        default:
-            let parts = store.remainingStr.split(separator: ":").compactMap { Int($0) }
-            guard parts.count == 3 else { return "" }
-            if parts[0] > 0 { return "\(parts[0])h" }
-            return "\(parts[1])m"
-        }
-    }
-
-    private func chipButton(_ key: String, label: String) -> some View {
-        Group {
-            if store.mode == key {
-                Button(label) {}.controlSize(.mini).buttonStyle(.borderedProminent).disabled(true)
-            } else {
-                Button(label) { store.set(key, store: sessions) }
-                    .controlSize(.mini).buttonStyle(.bordered)
-            }
-        }
+    private func pickFamily(_ f: Int) {
+        if f == 1 { store.set("forever", store: sessions) }
+        else if f == 2 { store.set("auto", store: sessions) }
+        else if store.active { store.set("off", store: sessions) }
     }
 
     /// Cambiar qué se evita reinicia el modo actual con la nueva mezcla.
