@@ -244,6 +244,7 @@ struct SettingsModalView: View {
         case "Shelf": return "tray"
         case "Focus": return "timer"
         case "Mac": return "cpu"
+        case "Música": return "music.note"
         case "Notas": return "note.text"
         default: return "gearshape"
         }

@@ -26,11 +26,8 @@ enum MiniTabs {
                     TimerView(store: ctx.focusTimer)
                     Divider()
                     AwakeView(store: ctx.awake, sessions: store)
-                })),                (title: "Mac", view: AnyView(VStack(spacing: 0) {
-                    StatsView(sessions: store)
-                    Divider()
-                    MusicView(store: ctx.music)
-                })),
+                })),                (title: "Mac", view: AnyView(StatsView(sessions: store))),
+                (title: "Música", view: AnyView(MusicView(store: ctx.music))),
                 (title: "Notas", view: AnyView(VStack(spacing: 0) {
                     QuickNoteView(store: ctx.quickNote)
                     Divider()

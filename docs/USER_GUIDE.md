@@ -49,9 +49,13 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
     en Codex/VS Code cae en el campo del notch; en el resto queda copiado
     y solo tienes que pulsar `⌘V` en la ventana del agente.
   - **Abrir**: trae al frente la ventana del agente.
-- **Auto-send (opcional)**: en la pestaña ⚙ puedes activar que la respuesta
-  se envíe sola con Enter. macOS pedirá permiso de **Accesibilidad** una
-  sola vez. Sin este permiso, NOTCH copia al portapapeles y pulsas `⌘V` tú.
+- **Auto-send (opcional)**: en el modal de Ajustes (`⚙` o `⌘,`) puedes
+  activar que la respuesta se envíe sola con Enter. macOS pedirá permiso de
+  **Accesibilidad** una sola vez. Sin este permiso, NOTCH copia al portapapeles
+  y pulsas `⌘V` tú.
+- **Luz de canción**: mientras suena una canción, todo el panel se tiñe con
+  el color dominante de su carátula (transición suave) y vuelve a su color
+  normal al cerrar el reproductor.
 
 ## Pestañas
 
@@ -60,9 +64,10 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 | Office | Oficina pixel-art: cada agente en su iMac. El que te necesita **se levanta**; el que terminó **se va al café**. Con 6+ agentes crece (sala, lounge, ciudad). La luz sigue la hora real. Ábrela con doble-tap de `⌘` derecha (requiere Accesibilidad; si no, usa el menú). |
 | Shelf | Arrastra archivos al panel: quedan en la estantería o caen directo en una sesión viva. Botones por archivo: **To agent** (lo entrega a la sesión que elijas), AirDrop, Zip, JPG, PDF. Las capturas de pantalla entran solas. El original nunca se modifica. |
 | Focus | **Timer** con anillo (avisa para descansar la vista) y **Keep awake** (30m/1h/2h o Auto mientras los agentes trabajan, salvo batería baja). |
-| Mac | CPU, memoria, batería y **qué agente está cargando tu Mac**. |
+| Mac | **Relojes de uso** (CPU, memoria, batería) con ticks y arco de color de semáforo: verde tranquilo, ámbar ocupado, rojo saturado. Chips con la **carga media 1/5/15** y **qué agente está cargando tu Mac**. |
+| Música | Reproducción estilo Lumio: carátula con vinilo asomando, título, barra de progreso con tiempos y controles ⏮ ⏸ ⏭. **El panel se ilumina con el color de la canción** (extraído de la carátula). Music.app y Spotify. |
 | Notas | **Quick-note**: escribe y Enter. Se guarda en `~/NOTCH-notes/`, en tu daily note de Obsidian (configura el vault) o en Apple Notes. **Historial**: qué hizo cada agente, hora a hora, hoy y últimos 6 días. |
-| ⚙ | Auto-send (Accessibility), ruta del vault de Obsidian y nota de privacidad. |
+| ⚙ | Es el botón de la derecha en la navbar (o `⌘,`): abre el **modal de Ajustes** — color y opacidad del panel, orden y visibilidad de las pestañas, comportamiento y privacidad. |
 
 ## Privacidad
 

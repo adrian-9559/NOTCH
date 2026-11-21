@@ -173,9 +173,9 @@ struct AwakeView: View {
 enum BatteryInfo {
     static func level() -> Int? {
         guard let out = runPmset() else { return nil }
-        // "... 85%; discharging; ..."
-        guard let pct = out.split(separator: ";").first(where: { $0.contains("%") }) else { return nil }
-        return Int(pct.filter { $0.isNumber })
+        // "... (id=12345678)\t 85%; ..." → solo los dígitos pegados al %.
+        guard let r = out.range(of: #"\d{1,3}(?=%)"#, options: .regularExpression) else { return nil }
+        return Int(out[r])
     }
 
     static func onAC() -> Bool {

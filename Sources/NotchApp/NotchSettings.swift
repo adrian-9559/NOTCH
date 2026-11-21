@@ -9,7 +9,7 @@ final class NotchSettings: ObservableObject {
 
     static let defaultAccent = "A550A7"
     /// Pestañas que la navbar puede mostrar (orden por defecto).
-    static let tabTitles = ["Office", "Shelf", "Focus", "Mac", "Notas"]
+    static let tabTitles = ["Office", "Shelf", "Focus", "Mac", "Música", "Notas"]
 
     /// Color de acento en hex (#RRGGBB).
     @Published var accentHex: String {

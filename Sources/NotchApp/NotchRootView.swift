@@ -10,6 +10,8 @@ import SwiftUI
 struct NotchRootView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject private var settings = NotchSettings.shared
+    /// Color de la canción que suena: ilumina el panel (lavado Lumio).
+    @ObservedObject private var music = NotchContext.shared.music
     var extraTabs: [(title: String, view: AnyView)] = []
     /// Ancho del notch físico: dibuja la pestaña negra que lo continúa.
     /// nil = Mac sin notch (sin pestaña).
@@ -146,23 +148,38 @@ struct NotchRootView: View {
                     endPoint: .bottom
                 )
             )
+            // Lavado con el color de la canción (como Lumio): el notch
+            // se ilumina con la carátula mientras suena.
+            if let tint = music.tint {
+                shape.fill(
+                    LinearGradient(
+                        colors: [
+                            tint.opacity(0.34),
+                            tint.opacity(0.13),
+                            tint.opacity(0.04)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .transition(.opacity)
+            }
         }
         .overlay(shape.stroke(Color.white.opacity(0.09), lineWidth: 1))
-        // Luz viva en el filo superior, como el canto del cristal.
+        // Luz viva en el filo superior: toma el color de la canción si
+        // hay, blanco cálido si no.
         .overlay(alignment: .top) {
-            UnevenRoundedRectangle(
-                cornerRadii: .init(topLeading: 0, bottomLeading: 0, bottomTrailing: 0, topTrailing: 0),
-                style: .continuous
-            )
-            .fill(
-                LinearGradient(
-                    colors: [.white.opacity(0.28), .clear],
-                    startPoint: .top,
-                    endPoint: .bottom
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [(music.tint ?? .white).opacity(0.35), .clear],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
-            )
-            .frame(height: 1)
+                .frame(height: 1)
         }
+        .animation(.easeInOut(duration: 1.1), value: music.tint)
         .shadow(radius: 24)
     }
 }
@@ -265,6 +282,7 @@ func iconName(for title: String) -> String {
     case "Shelf": return "tray"
     case "Focus": return "timer"
     case "Mac": return "cpu"
+    case "Música": return "music.note"
     case "Notas": return "note.text"
     default: return "gearshape"
     }

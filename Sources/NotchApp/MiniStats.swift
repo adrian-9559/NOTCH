@@ -103,7 +103,9 @@ struct StatsView: View {
                     value: stats.battery.map { "\($0)%" } ?? "—",
                     sub: stats.battery.map { $0 >= 99 ? "llena" : (stats.onAC ? "cargando ⚡" : "en batería") } ?? "sin batería",
                     fraction: batFrac,
-                    available: stats.battery != nil
+                    available: stats.battery != nil,
+                    inverted: true,
+                    alwaysGreen: stats.onAC
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -138,6 +140,10 @@ struct UsageGauge: View {
     var sub: String
     var fraction: Double
     var available: Bool = true
+    /// Batería: el color mide lo que queda (poco = rojo), no el uso.
+    var inverted: Bool = false
+    /// Cargando: siempre en verde.
+    var alwaysGreen: Bool = false
 
     private let ticks = 40
 
@@ -149,7 +155,10 @@ struct UsageGauge: View {
     }
 
     private var severity: Color {
-        available ? Self.severity(fraction: fraction) : Color.white.opacity(0.35)
+        guard available else { return Color.white.opacity(0.35) }
+        if alwaysGreen { return Color(hex: "2F9E6E") }
+        let f = inverted ? 1 - fraction : fraction
+        return Self.severity(fraction: f)
     }
 
     var body: some View {

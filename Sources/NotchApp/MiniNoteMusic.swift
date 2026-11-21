@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import CoreImage
 import SwiftUI
 
 // MARK: - Quick note: tap, type, Enter. A Lumio, Obsidian o carpeta.
@@ -94,43 +95,197 @@ struct QuickNoteView: View {
     }
 }
 
-// MARK: - Música: qué suena (Music.app / Spotify por AppleScript)
+// MARK: - Música: reproducción estilo Lumio + color que ilumina el notch
+// (Music.app / Spotify por AppleScript). Trae carátula, progreso y
+// controles, y extrae el color dominante de la carátula para el lavado
+// del panel: el notch se ilumina con el color de la canción.
 
 final class MusicStore: ObservableObject {
     @Published var title = ""
     @Published var artist = ""
     @Published var source = ""
     @Published var playing = false
+    @Published var position: Double = 0
+    @Published var duration: Double = 0
+    @Published var artwork: NSImage?
+    /// Color dominante de la carátula: ilumina el panel del notch.
+    @Published var tint: Color?
 
+    private var busy = false
+    private var artworkToken = 0
+    private var timer: Timer?
+
+    init() {
+        // Poll propio cada 1 s: el color ilumina el notch aunque la
+        // pestaña de música no esté seleccionada.
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.poll()
+        }
+        timer?.tolerance = 0.25
+        poll()
+    }
+
+    deinit { timer?.invalidate() }
+
+    /// Consulta en background (osascript es bloqueante) y publica en main.
     func poll() {
-        if let t = query(app: "Music", trackCmd: "name of current track", artistCmd: "artist of current track") {
-            apply(t, source: "Music")
-        } else if let t = query(app: "Spotify", trackCmd: "name of current track", artistCmd: "artist of current track") {
-            apply(t, source: "Spotify")
-        } else {
-            playing = false
+        guard !busy else { return }
+        busy = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let musicApp = Self.isRunning("Music")
+            let spotifyApp = Self.isRunning("Spotify")
+            var hit: (t: String, a: String, p: Double, d: Double, playing: Bool, app: String)?
+            if musicApp, let r = self.query(app: "Music") { hit = (r.0, r.1, r.2, r.3, r.4, "Music") }
+            else if spotifyApp, let r = self.query(app: "Spotify") { hit = (r.0, r.1, r.2, r.3, r.4, "Spotify") }
+            DispatchQueue.main.async {
+                self.busy = false
+                if let hit {
+                    self.apply(hit)
+                } else {
+                    self.playing = false
+                    // Sin reproductor en marcha: el notch vuelve a su color.
+                    if !musicApp && !spotifyApp, self.tint != nil {
+                        withAnimation(.easeInOut(duration: 1.1)) { self.tint = nil }
+                    }
+                }
+            }
         }
     }
 
-    private func apply(_ t: (String, String, Bool), source: String) {
-        title = t.0; artist = t.1; playing = t.2; self.source = source
+    // MARK: - Controles (mismos comandos AppleScript en ambos apps)
+
+    func back() { command("back track") }
+    func togglePlay() { command("playpause") }
+    func next() { command("next track") }
+
+    private func command(_ cmd: String) {
+        let app = source.isEmpty ? "Music" : source
+        guard Self.isRunning(app) else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            _ = self?.runOut("tell application \"\(app)\" to \(cmd)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.poll() }
+        }
     }
 
-    private func query(app: String, trackCmd: String, artistCmd: String) -> (String, String, Bool)? {
-        guard NSWorkspace.shared.runningApplications.contains(where: { $0.localizedName == app }) else { return nil }
+    // MARK: - estado
+
+    private func apply(_ r: (t: String, a: String, p: Double, d: Double, playing: Bool, app: String)) {
+        let changed = (title != r.t || artist != r.a || source != r.app)
+        title = r.t
+        artist = r.a
+        source = r.app
+        playing = r.playing
+        position = r.p
+        duration = r.d
+        if changed {
+            fetchArtwork(app: r.app)
+        }
+    }
+
+    /// Devuelve (título, artista, posición, duración, sonando) o nil.
+    private func query(app: String) -> (String, String, Double, Double, Bool)? {
         let script = """
         tell application "\(app)"
-            if player state is playing then
-                return (\(trackCmd) as string) & " | " & (\(artistCmd) as string) & " | playing"
-            else
-                return " |  | stopped"
-            end if
+          try
+            set t to name of current track
+            if t is "" then return ""
+            set a to artist of current track
+            set p to player position
+            set d to duration of current track
+            set s to "stopped"
+            if player state is playing then set s to "playing"
+            return t & " | " & a & " | " & (p as string) & " | " & (d as string) & " | " & s
+          on error
+            return ""
+          end try
         end tell
         """
         guard let out = runOut(script), !out.isEmpty else { return nil }
-        let parts = out.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
-        guard parts.count == 3, !parts[0].isEmpty else { return nil }
-        return (parts[0], parts[1], parts[2] == "playing")
+        let parts = out.split(separator: "|", maxSplits: 4, omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 5, !parts[0].isEmpty else { return nil }
+        var dur = Double(parts[3]) ?? 0
+        // Spotify devuelve milisegundos en algunos versiones.
+        if dur > 6000 { dur /= 1000 }
+        return (parts[0], parts[1], Double(parts[2]) ?? 0, dur, parts[4] == "playing")
+    }
+
+    // MARK: - Carátula + color dominante
+
+    private func fetchArtwork(app: String) {
+        artworkToken += 1
+        let token = artworkToken
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            var image: NSImage?
+            if app == "Spotify" {
+                // Spotify expone la URL de la carátula.
+                if let s = self.runOut("tell application \"Spotify\" to artwork url of current track"),
+                   let url = URL(string: s),
+                   let data = try? Data(contentsOf: url) {
+                    image = NSImage(data: data)
+                }
+            } else {
+                // Music.app: volcar los bytes de la carátula a un fichero.
+                let path = NSTemporaryDirectory() + "notch-art.bin"
+                let script = """
+                tell application "Music"
+                  try
+                    set artData to data of artwork 1 of current track
+                    set f to open for access POSIX file "\(path)" with write permission
+                    set eof of f to 0
+                    write artData to f
+                    close access f
+                    return "ok"
+                  on error
+                    return ""
+                  end try
+                end tell
+                """
+                if self.runOut(script) == "ok" {
+                    image = NSImage(contentsOfFile: path)
+                }
+            }
+            guard let img = image else { return }
+            let color = Self.dominantColor(of: img)
+            DispatchQueue.main.async {
+                guard token == self.artworkToken else { return }
+                self.artwork = img
+                // Lavado del panel animado al color de la canción.
+                withAnimation(.easeInOut(duration: 1.1)) { self.tint = color }
+            }
+        }
+    }
+
+    /// Color promedio de la carátula, realzado para que el lavado del
+    /// panel se vea vivo (saturación y brillo acotados).
+    static func dominantColor(of image: NSImage) -> Color? {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let ci = CIImage(cgImage: cg)
+        guard let filter = CIFilter(name: "CIAreaAverage", parameters: [
+            kCIInputImageKey: ci,
+            kCIInputExtentKey: CIVector(cgRect: ci.extent)
+        ]), let output = filter.outputImage else { return nil }
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        var px = [UInt8](repeating: 0, count: 4)
+        let ctx = CIContext(options: [.workingColorSpace: space])
+        ctx.render(output, toBitmap: &px, rowBytes: 4, bounds: output.extent,
+                   format: .RGBA8, colorSpace: space)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        NSColor(srgbRed: CGFloat(px[0]) / 255, green: CGFloat(px[1]) / 255,
+                blue: CGFloat(px[2]) / 255, alpha: 1)
+            .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        // Realce: colores vivos pero no cegadores.
+        s = max(0.42, min(s * 1.25, 0.95))
+        b = min(max(b, 0.58), 0.82)
+        return Color(hue: h, saturation: s, brightness: b)
+    }
+
+    // MARK: - utilidades
+
+    private static func isRunning(_ app: String) -> Bool {
+        NSWorkspace.shared.runningApplications.contains { $0.localizedName == app }
     }
 
     private func runOut(_ source: String) -> String? {
@@ -147,36 +302,148 @@ final class MusicStore: ObservableObject {
     }
 }
 
+/// Reproducción estilo Lumio: carátula con vinilo asomando, título en
+/// mayúsculas, barra de progreso con tiempos, controles y fuente arriba
+/// a la derecha. El color de la carátula ilumina el panel del notch.
 struct MusicView: View {
     @ObservedObject var store: MusicStore
-    private let timer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
-    @State private var wave = 0
-    private let waveTimer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
+
+    private var fraction: Double {
+        store.duration > 0 ? min(1, max(0, store.position / store.duration)) : 0
+    }
+    private var wash: Color { store.tint ?? Color.lumioMagenta }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: store.playing ? "music.note" : "music.note.list")
-                .font(.title2)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(store.playing ? store.title : "Silencio")
-                    .font(.callout).lineLimit(1)
-                Text(store.playing ? "\(store.artist) · \(store.source)" : "Music / Spotify")
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer()
-            // Onda con sus colores.
-            HStack(spacing: 2) {
-                ForEach(0..<12, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(store.playing ? .accentColor : .gray.opacity(0.4))
-                        .frame(width: 3, height: store.playing ? CGFloat(4 + ((i * 7 + wave) % 14)) : 4)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 14) {
+                artworkStack
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(store.title.isEmpty ? "SILENCIO" : store.title.uppercased())
+                        .font(.notchMono(15))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Text(store.title.isEmpty ? "Music / Spotify" : (store.artist.isEmpty ? store.source : store.artist))
+                        .font(.notchMono(11))
+                        .foregroundStyle(Color.white.opacity(0.6))
+                        .lineLimit(1)
+                    progressBar
+                        .padding(.top, 10)
                 }
+                Spacer(minLength: 6)
+                controls
             }
         }
-        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .topTrailing) { sourceLabel }
         .onAppear { store.poll() }
-        .onReceive(timer) { _ in store.poll() }
-        .onReceive(waveTimer) { _ in wave += 1 }
+    }
+
+    // MARK: - piezas
+
+    private var artworkStack: some View {
+        ZStack {
+            // Vinilo asomando detrás de la carátula.
+            Circle()
+                .fill(Color.black.opacity(0.9))
+                .frame(width: 62, height: 62)
+                .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 1))
+                .overlay(
+                    Circle().stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        .frame(width: 40, height: 40)
+                )
+                .overlay(
+                    Circle().fill(Color.white.opacity(0.25)).frame(width: 6, height: 6)
+                )
+                .offset(x: 27)
+            Group {
+                if let art = store.artwork {
+                    Image(nsImage: art)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    ZStack {
+                        LinearGradient(
+                            colors: [wash.opacity(0.55), Color.black.opacity(0.8)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                        Image(systemName: "music.note")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
+                }
+            }
+            .frame(width: 74, height: 74)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.14), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.5), radius: 8, y: 4)
+        }
+        .frame(width: 104, height: 78)
+    }
+
+    private var progressBar: some View {
+        VStack(spacing: 4) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.14))
+                    Capsule()
+                        .fill(wash)
+                        .frame(width: max(4, geo.size.width * fraction), height: 4)
+                }
+            }
+            .frame(height: 4)
+            .animation(.linear(duration: 0.9), value: store.position)
+            HStack {
+                Text(Self.fmt(store.position))
+                Spacer()
+                Text("-" + Self.fmt(max(0, store.duration - store.position)))
+            }
+            .font(.notchMono(9))
+            .monospacedDigit()
+            .foregroundStyle(Color.white.opacity(0.5))
+        }
+    }
+
+    private var controls: some View {
+        HStack(spacing: 16) {
+            Button { store.back() } label: {
+                Image(systemName: "backward.fill")
+            }
+            .help("Anterior")
+            Button { store.togglePlay() } label: {
+                Image(systemName: store.playing ? "pause.fill" : "play.fill")
+                    .font(.system(size: 19, weight: .semibold))
+            }
+            .help(store.playing ? "Pausa" : "Reproducir")
+            Button { store.next() } label: {
+                Image(systemName: "forward.fill")
+            }
+            .help("Siguiente")
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 15, weight: .semibold))
+        .foregroundStyle(.white)
+        .padding(.trailing, 4)
+    }
+
+    private var sourceLabel: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(store.title.isEmpty ? Color.white.opacity(0.3) : wash.opacity(store.playing ? 1 : 0.45))
+                .frame(width: 5, height: 5)
+            Text(store.source.isEmpty ? "MÚSICA" : store.source.uppercased())
+                .font(.notchMono(9))
+                .kerning(1)
+        }
+        .foregroundStyle(Color.white.opacity(0.5))
+    }
+
+    private static func fmt(_ seconds: Double) -> String {
+        let s = Int(seconds.rounded())
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 }
 #endif
