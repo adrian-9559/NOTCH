@@ -4,7 +4,7 @@ import NotchCore
 import SwiftUI
 
 /// App mínima: icono en menu bar + ventana notch + polling cada 2s.
-/// Office pixel-art / shelf / mini-features cuelgan de `sessions` aquí.
+/// Shelf / mini-features cuelgan de `sessions` aquí.
 final class NotchAppMain: NSObject {
     static func main() {
         let app = NSApplication.shared
@@ -21,13 +21,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: NotchWindowController?
     private var lights = NotchLightsController()
     private var aura = NotchAuraController()
+    private var toast = MusicToastController()
     private var hover = NotchHoverController()
     private var notchAnchorX: CGFloat?
     private var notchTopY: CGFloat?
     private var notchWidth: CGFloat?
     private var notchRect: CGRect?
     private var timer: Timer?
-    private var officeVisible = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -99,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showPanel() {
+        toast.hide()
         windowController?.show(anchorX: notchAnchorX, topY: notchTopY)
     }
 
@@ -160,6 +161,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // El aura va detrás: se ordena primero y el panel queda delante.
         aura.rebuild(notches: notches)
+        // El aviso de canción nueva sale del notch si el panel no está abierto.
+        toast.isPanelVisible = { [weak self] in self?.windowController?.isVisible == true }
+        toast.rebuild(notches: notches)
     }
 
     // MARK: - Hover: abrir al subir el ratón, cerrar al sacarlo
@@ -191,15 +195,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sender.state = hover.isEnabled ? .on : .off
     }
 
-    // MARK: - Office: doble-tap de ⌘ derecha (con fallback al menú si no hay permiso)
+    // MARK: - Notch: doble-tap de ⌘ derecha (con fallback al menú si no hay permiso)
 
     private func installOfficeHotKey() {
-        OfficeHotKey.shared.onDoubleTap = {
-            OfficeWindowController.shared.show()
+        OfficeHotKey.shared.onDoubleTap = { [weak self] in
+            self?.toggleNotch()
         }
         OfficeHotKey.shared.install()
         if OfficeHotKey.shared.isAvailable {
-            let item = NSMenuItem(title: "Office: doble-tap ⌘ der. (activo)", action: nil, keyEquivalent: "")
+            let item = NSMenuItem(title: "Notch: doble-tap ⌘ der. (activo)", action: nil, keyEquivalent: "")
             item.isEnabled = false
             statusItem.menu?.insertItem(item, at: 0)
         }

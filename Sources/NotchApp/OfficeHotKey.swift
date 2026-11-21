@@ -1,7 +1,7 @@
 #if os(macOS)
 import AppKit
 
-/// Doble-tap de ⌘ derecha para abrir la oficina.
+/// Doble-tap de ⌘ derecha para abrir el notch.
 /// Requiere permiso de Accesibilidad para el monitor global;
 /// sin él, `isAvailable` es false y se usa el menú.
 final class OfficeHotKey {

@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Vista raíz del notch. Datos desde SessionStore; acciones inyectadas
 /// (Allow/Reply/Open las implementa ReplyService en su lote).
-/// `extraTabs` permite añadir Office/Shelf/Mini sin tocar este archivo.
+/// `extraTabs` permite añadir Shelf/Mini sin tocar este archivo.
 /// Los ajustes (color, opacidad, orden/visibilidad de pestañas) viven en
 /// NotchSettings y se aplican al instante: esta vista los observa.
 struct NotchRootView: View {
@@ -20,7 +20,7 @@ struct NotchRootView: View {
     var onReply: (AgentSession, String) -> Void = { _, _ in }
     var onOpen: (AgentSession) -> Void = { _ in }
     /// Pestaña seleccionada por título (sobrevive a reordenar/ocultar).
-    @State private var selectedTitle = "Office"
+    @State private var selectedTitle = "Shelf"
     /// Altura mostrada del área de contenido (se anima a mano: si se
     /// usara withAnimation, la ventana saltaría al final de golpe).
     @State private var shownHeight: CGFloat = 300
@@ -30,7 +30,7 @@ struct NotchRootView: View {
     @State private var hasMeasured = false
 
     /// Contenido entre estos límites: nada queda cortado por abajo y lo
-    /// sobrado (Office con ciudad, historial largo) sigue con scroll.
+    /// sobrado (historial largo) sigue con scroll.
     private let minContentHeight: CGFloat = 84
     private let maxContentHeight: CGFloat = 360
 
@@ -123,7 +123,7 @@ struct NotchRootView: View {
 
                         // Altura según el contenido de cada pestaña: lo
                         // que tiene poco (Música) encoge el panel y lo que
-                        // se desborda (Office con ciudad, historial) sigue
+                        // se desborda (historial largo) sigue
                         // con scroll. La medición es natural (el ScrollView
                         // propone altura infinita al contenido), así que no
                         // hay bucle con la altura mostrada.
@@ -344,7 +344,6 @@ private struct ContentHeightKey: PreferenceKey {
 
 func iconName(for title: String) -> String {
     switch title {
-    case "Office": return "building.2"
     case "Shelf": return "tray"
     case "Focus": return "timer"
     case "Mac": return "cpu"

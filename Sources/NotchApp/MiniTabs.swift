@@ -20,7 +20,6 @@ enum MiniTabs {
             guard let store = NotchContext.shared.store else { return [] }
             let ctx = NotchContext.shared
             return [
-                (title: "Office", view: AnyView(PixelOfficeView(store: store))),
                 (title: "Shelf", view: AnyView(ShelfView(store: store, shelf: ctx.shelf))),
                 (title: "Focus", view: AnyView(VStack(spacing: 0) {
                     TimerView(store: ctx.focusTimer)

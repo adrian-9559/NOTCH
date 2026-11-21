@@ -240,7 +240,6 @@ struct SettingsModalView: View {
 
     private func iconName(for title: String) -> String {
         switch title {
-        case "Office": return "building.2"
         case "Shelf": return "tray"
         case "Focus": return "timer"
         case "Mac": return "cpu"

@@ -59,12 +59,14 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 - **Aura con el notch cerrado**: aunque no abras el panel, el notch se
   envuelve en un halo del color de la canción mientras suena; al pausar,
   se apaga.
+- **Aviso de canción nueva**: al cambiar de canción sale del notch una
+  píldora con la carátula en pequeño, el título y el ecualizador; se
+  oculta sola a los pocos segundos.
 
 ## Pestañas
 
 | Pestaña | Qué hace |
 |---|---|
-| Office | Oficina pixel-art estilo Lumio: cada agente de espaldas en su iMac con su color. El que trabaja teclea (código en pantalla); el que te necesita **se levanta** con `!`; el que terminó **se va al café** del lounge. Botón **Abrir la oficina**: ventana grande con pared (ventanas día/noche, estantería, pizarra de stats reales, reloj con la hora, kitchenette), lounge y suelo de baldosas. También con doble-tap de `⌘` derecha (requiere Accesibilidad). |
 | Shelf | Arrastra archivos al panel: quedan en la estantería o caen directo en una sesión viva. Botones por archivo: **To agent** (lo entrega a la sesión que elijas), AirDrop, Zip, JPG, PDF. Las capturas de pantalla entran solas. El original nunca se modifica. |
 | Focus | **Timer** con anillo (avisa para descansar la vista) y **Keep awake** (30m/1h/2h o Auto mientras los agentes trabajan, salvo batería baja). |
 | Mac | **Relojes de uso** (CPU, memoria, batería) con ticks y arco de color de semáforo: verde tranquilo, ámbar ocupado, rojo saturado. Chips con la **carga media 1/5/15** y **qué agente está cargando tu Mac**. |
