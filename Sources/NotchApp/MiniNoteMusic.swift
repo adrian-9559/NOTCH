@@ -52,6 +52,28 @@ final class QuickNoteStore: ObservableObject {
         return dir.appendingPathComponent("notes.md")
     }
 
+    /// Últimas notas guardadas (de Lumio): para verlas sin abrir nada.
+    func recentNotes(limit: Int = 5) -> [(date: Date, text: String)] {
+        guard let raw = try? String(contentsOf: lumioFile(), encoding: .utf8) else { return [] }
+        return Self.parseNotes(raw, limit: limit)
+    }
+
+    /// Parsea líneas "[timestamp] texto" (más nuevas primero). Pura → testeable.
+    static func parseNotes(_ raw: String, limit: Int = 5) -> [(date: Date, text: String)] {
+        let iso = ISO8601DateFormatter()
+        var out: [(Date, String)] = []
+        for line in raw.split(separator: "\n").reversed() {
+            guard line.hasPrefix("["), let end = line.firstIndex(of: "]") else { continue }
+            let stamp = String(line.dropFirst().prefix(upTo: end))
+            guard let d = iso.date(from: stamp) else { continue }
+            let text = String(line[line.index(after: end)...]).trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { continue }
+            out.append((d, text))
+            if out.count >= limit { break }
+        }
+        return out
+    }
+
     private func append(_ line: String, to url: URL) {
         if FileManager.default.fileExists(atPath: url.path),
            let h = try? FileHandle(forWritingTo: url) {
@@ -73,7 +95,6 @@ struct QuickNoteView: View {
     @ObservedObject private var settings = NotchSettings.shared
     @State private var text = ""
     @State private var vaultPath: String = UserDefaults.standard.string(forKey: "notchObsidianVault") ?? ""
-    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -99,33 +120,11 @@ struct QuickNoteView: View {
                 }
             }
             // Entrada estilo barra de comandos.
-            HStack(spacing: 8) {
-                TextField(tr("note.ph"), text: $text, onCommit: { save() })
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .focused($focused)
-                    .onSubmit(save)
-                if !text.isEmpty {
-                    Button { save() } label: {
-                        Image(systemName: "return")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 26, height: 26)
-                            .background(Circle().fill(settings.accent))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(0.05))
+            NotchTextField(
+                placeholder: tr("note.ph"), text: $text,
+                icon: "square.and.pencil", hint: "⏎",
+                color: settings.accent, onCommit: save
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(focused ? settings.accent.opacity(0.6) : Color.white.opacity(0.09), lineWidth: 1)
-            )
-            .animation(.snappy(duration: 0.2), value: focused)
             HStack(spacing: 6) {
                 Button(tr("note.save")) { save() }
                     .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
@@ -134,26 +133,63 @@ struct QuickNoteView: View {
                     .buttonStyle(NotchGhostButton(size: .small))
                 Spacer()
             }
-            // Destino Obsidian en una fila con icono.
-            HStack(spacing: 8) {
-                Image(systemName: "folder.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.white.opacity(0.45))
-                    .frame(width: 22)
-                TextField(tr("note.vaultPh"), text: $vaultPath, onCommit: {
-                    UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
-                })
-                .textFieldStyle(.plain)
-                .font(.caption)
+            // Últimas capturas: lo guardado, sin abrir nada.
+            let recent = store.recentNotes()
+            if !recent.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(recent.indices, id: \.self) { i in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(i == 0 ? settings.accent : Color.white.opacity(0.25))
+                                .frame(width: 6, height: 6)
+                            Text(recent[i].text)
+                                .font(.caption)
+                                .foregroundStyle(Color.white.opacity(i == 0 ? 0.9 : 0.6))
+                                .lineLimit(2)
+                            Spacer()
+                            Text(shortWhen(recent[i].date))
+                                .font(.notchMono(9))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 5)
+                        if i < recent.count - 1 {
+                            Divider().background(Color.white.opacity(0.07))
+                        }
+                    }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.03))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.white.opacity(0.07), lineWidth: 1)
+                )
             }
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.03)))
+            // Destino Obsidian en una fila con icono.
+            NotchTextField(
+                placeholder: tr("note.vaultPh"), text: $vaultPath,
+                icon: "folder.fill", color: settings.accent, font: .caption,
+                onCommit: {
+                    UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
+                }
+            )
         }
         .padding(8)
     }
 
     private func save() {
         store.save(text); text = ""
+    }
+
+    private func shortWhen(_ d: Date) -> String {
+        let cal = Calendar.current
+        let f = DateFormatter(); f.locale = .current
+        if cal.isDateInToday(d) { f.dateFormat = "HH:mm"; return f.string(from: d) }
+        if cal.isDateInYesterday(d) { return tr("act.yesterday") }
+        f.dateStyle = .short; f.timeStyle = .none
+        return f.string(from: d)
     }
 }
 

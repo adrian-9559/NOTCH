@@ -373,8 +373,11 @@ struct StatsView: View {
                         color: settings.accent
                     )
                     .frame(maxWidth: 150)
-                    TextField(tr("mac.search"), text: $procQuery)
-                        .textFieldStyle(.roundedBorder).font(.caption)
+                    NotchTextField(
+                        placeholder: tr("mac.search"), text: $procQuery,
+                        icon: "magnifyingglass",
+                        color: settings.accent, font: .caption
+                    )
                 }
                 if sortedProcs.isEmpty {
                     Text(tr("mac.noMatch")).font(.caption).foregroundStyle(.secondary)

@@ -113,14 +113,16 @@ struct AgentsView: View {
             HStack(spacing: 6) {
                 Button(tr("waiting.allow")) { ReplyService.shared.allow(session: s) }
                     .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
-                TextField(tr("waiting.replyPh"), text: Binding(
-                    get: { replyText[s.agent.rawValue] ?? "" },
-                    set: { replyText[s.agent.rawValue] = $0 }
-                ), onCommit: {
-                    sendReply(s)
-                })
-                .textFieldStyle(.roundedBorder)
-                .font(.notchMono(11))
+                NotchTextField(
+                    placeholder: tr("waiting.replyPh"),
+                    text: Binding(
+                        get: { replyText[s.agent.rawValue] ?? "" },
+                        set: { replyText[s.agent.rawValue] = $0 }
+                    ),
+                    color: settings.accent,
+                    font: .notchMono(11),
+                    onCommit: { sendReply(s) }
+                )
                 Button(tr("waiting.send")) { sendReply(s) }
                     .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
                     .disabled((replyText[s.agent.rawValue] ?? "").isEmpty)
@@ -184,13 +186,22 @@ struct AgentsView: View {
                 .foregroundStyle(.white.opacity(0.7))
                 .lineLimit(1)
             Spacer()
-            Text(s.status.rawValue)
+            Text(statusText(s.status))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 9).padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.03)))
         .opacity(0.85)
+    }
+
+    private func statusText(_ st: AgentStatus) -> String {
+        switch st {
+        case .done: return tr("agents.stDone")
+        case .idle: return tr("agents.stIdle")
+        case .crashed: return tr("agents.stCrashed")
+        default: return st.rawValue
+        }
     }
 
     private func statusColor(_ st: AgentStatus) -> Color {

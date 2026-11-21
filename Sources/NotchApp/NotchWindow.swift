@@ -31,6 +31,16 @@ final class NotchPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// El panel no roba foco al abrirse por hover, pero un clic explícito
+    /// SÍ activa la app (ver mouseDown en la vista no vale: los controles
+    /// consumen el clic antes). Sin esto no se puede escribir en los campos.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        super.sendEvent(event)
+    }
 }
 
 /// Posiciona el panel centrado bajo el notch (o centro superior si no hay).

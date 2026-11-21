@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 
 // MARK: - Controles propios de NOTCH (100% personalizados)
@@ -194,6 +195,64 @@ struct NotchStepper: View {
             .disabled(value > range.upperBound)
         }
         .padding(.vertical, 2)
+    }
+}
+// MARK: - Campo de texto propio
+
+/// Input estilo command-palette (Raycast): icono, placeholder, foco con
+/// filo de acento, botón de limpiar y pista de tecla. Sustituye a todos
+/// los `.roundedBorder` de la app.
+struct NotchTextField: View {
+    var placeholder: String
+    @Binding var text: String
+    var icon: String? = nil
+    var hint: String? = nil
+    var color: Color = NotchSettings.shared.accent
+    var font: Font = .system(size: 13)
+    var onCommit: () -> Void = {}
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(focused ? color : Color.white.opacity(0.45))
+                    .frame(width: 20)
+            }
+            TextField(placeholder, text: $text, onCommit: onCommit)
+                .textFieldStyle(.plain)
+                .font(font)
+                .focused($focused)
+            if !text.isEmpty {
+                Button { text = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                }
+                .buttonStyle(.plain)
+            } else if let hint {
+                Text(hint)
+                    .font(.notchMono(10))
+                    .foregroundStyle(Color.white.opacity(0.3))
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.07)))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(focused ? 0.07 : 0.045))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(focused ? color.opacity(0.55) : Color.white.opacity(0.09), lineWidth: focused ? 1.5 : 1)
+        )
+        .animation(.snappy(duration: 0.18), value: focused)
     }
 }
 #endif

@@ -200,14 +200,32 @@ struct TasksView: View {
     @State private var detail = ""
     @State private var agentRaw: String?
     @State private var priority: TaskPriority = .normal
-    @State private var filterRaw: String? = nil // nil = todas
     @State private var agentFilterRaw: String? = nil
     @State private var expanded: UUID? = nil
+    @State private var showArchived = false
 
-    private var shown: [AgentTask] {
+    private var agentFiltered: [AgentTask] {
         tasks.tasks.filter { t in
-            (filterRaw == nil || t.status.rawValue == filterRaw) &&
-            (agentFilterRaw == nil || t.agentRaw == agentFilterRaw)
+            agentFilterRaw == nil || t.agentRaw == agentFilterRaw
+        }
+    }
+
+    private func inStatus(_ st: TaskStatus) -> [AgentTask] {
+        agentFiltered.filter { $0.status == st }
+    }
+
+    /// Cabecera de sección estilo Linear: punto + nombre + contador.
+    private func sectionHeader(_ title: String, count: Int, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(title.uppercased())
+                .font(.notchMono(10))
+                .foregroundStyle(Color.white.opacity(0.55))
+                .kerning(1.2)
+            Text("\(count)")
+                .font(.notchMono(10))
+                .foregroundStyle(Color.white.opacity(0.35))
+                .monospacedDigit()
         }
     }
 
@@ -255,13 +273,8 @@ struct TasksView: View {
             if showAdd {
                 addForm
             }
-            // Filtros: estado + agente.
+            // Filtro por agente (el estado va por secciones).
             HStack(spacing: 6) {
-                NotchSegments(
-                    selection: $filterRaw,
-                    options: [(nil, tr("task.all")), ("todo", tr("task.todo")), ("doing", tr("task.doing")), ("done", tr("task.done"))],
-                    color: settings.accent
-                )
                 Spacer()
                 Menu(agentFilterRaw.flatMap({ AgentID(rawValue: $0)?.displayName }) ?? tr("task.anyone")) {
                     Button(tr("task.anyone")) { agentFilterRaw = nil }
@@ -271,23 +284,78 @@ struct TasksView: View {
                 }
                 .controlSize(.mini)
             }
-            if shown.isEmpty {
-                VStack(spacing: 4) {
+            if agentFiltered.isEmpty {
+                VStack(spacing: 6) {
                     Image(systemName: "checklist")
                         .font(.system(size: 16))
                         .foregroundStyle(Color.white.opacity(0.25))
-                    Text(filterRaw == nil && agentFilterRaw == nil ? tr("task.empty") : tr("act.empty"))
+                    Text(agentFilterRaw == nil ? tr("task.empty") : tr("act.empty"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 14)
             } else {
-                ForEach(shown) { task in
-                    TaskRow(
-                        task: task, store: tasks, sessions: sessions,
-                        expanded: expanded == task.id,
-                        onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
-                    )
+                let todos = inStatus(.todo), doings = inStatus(.doing)
+                let dones = inStatus(.done), archived = inStatus(.archived)
+                if !doings.isEmpty {
+                    sectionHeader(tr("task.doing"), count: doings.count, color: settings.accent)
+                    ForEach(doings) { task in
+                        TaskRow(
+                            task: task, store: tasks, sessions: sessions,
+                            expanded: expanded == task.id,
+                            onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
+                        )
+                    }
+                }
+                if !todos.isEmpty {
+                    sectionHeader(tr("task.todo"), count: todos.count, color: Color.white.opacity(0.5))
+                    ForEach(todos) { task in
+                        TaskRow(
+                            task: task, store: tasks, sessions: sessions,
+                            expanded: expanded == task.id,
+                            onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
+                        )
+                    }
+                }
+                if !dones.isEmpty {
+                    sectionHeader(tr("task.done"), count: dones.count, color: Color(hex: "2F9E6E"))
+                    ForEach(dones) { task in
+                        TaskRow(
+                            task: task, store: tasks, sessions: sessions,
+                            expanded: expanded == task.id,
+                            onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
+                        )
+                    }
+                }
+                if !archived.isEmpty {
+                    Button {
+                        showArchived.toggle()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: showArchived ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(Color.white.opacity(0.4))
+                                .frame(width: 12)
+                            Text(tr("task.archived").uppercased())
+                                .font(.notchMono(10))
+                                .foregroundStyle(Color.white.opacity(0.4))
+                                .kerning(1.2)
+                            Text("\(archived.count)")
+                                .font(.notchMono(10))
+                                .foregroundStyle(Color.white.opacity(0.3))
+                                .monospacedDigit()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    if showArchived {
+                        ForEach(archived) { task in
+                            TaskRow(
+                                task: task, store: tasks, sessions: sessions,
+                                expanded: expanded == task.id,
+                                onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -298,17 +366,16 @@ struct TasksView: View {
     private var addForm: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(settings.accent)
-                TextField(tr("task.titlePh"), text: $title, onCommit: add)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                NotchTextField(
+                    placeholder: tr("task.titlePh"), text: $title,
+                    icon: "plus.circle.fill", hint: "⏎",
+                    color: settings.accent, onCommit: add
+                )
             }
-            TextField(tr("task.detailPh"), text: $detail, onCommit: add)
-                .textFieldStyle(.plain)
-                .font(.caption)
-                .foregroundStyle(Color.white.opacity(0.75))
+            NotchTextField(
+                placeholder: tr("task.detailPh"), text: $detail,
+                color: settings.accent, font: .caption, onCommit: add
+            )
             HStack(spacing: 8) {
                 Menu(agentRaw.flatMap({ AgentID(rawValue: $0)?.displayName }) ?? tr("task.anyone")) {
                     Button(tr("task.anyone")) { agentRaw = nil }

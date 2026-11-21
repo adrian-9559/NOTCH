@@ -416,10 +416,13 @@ struct SettingsModalView: View {
                 }
             }
             SettingsCard(label: tr("set.vault"), icon: "folder.fill", accent: settings.accent) {
-                TextField(tr("set.vaultPh"), text: $vaultPath, onCommit: {
-                    UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
-                })
-                .textFieldStyle(.roundedBorder).font(.callout)
+                NotchTextField(
+                    placeholder: tr("set.vaultPh"), text: $vaultPath,
+                    icon: "folder", color: settings.accent, font: .callout,
+                    onCommit: {
+                        UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
+                    }
+                )
             }
         }
     }

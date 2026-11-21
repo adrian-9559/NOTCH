@@ -198,31 +198,53 @@ struct ActivityView: View {
                 .background(actCard)
             }
 
-            // Semana: 7 columnas con letra del día.
-            let week = store.secondsPerDay(last: 7)
-            if week.contains(where: { $0.seconds > 0 }) {
-                let peak = max(week.map(\.seconds).max() ?? 1, 1)
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .bottom, spacing: 6) {
-                        ForEach(week.indices.reversed(), id: \.self) { i in
-                            let v = week[i].seconds
-                            let isToday = Calendar.current.isDateInToday(week[i].day)
-                            VStack(spacing: 3) {
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(isToday ? settings.accent : settings.accent.opacity(v > 0 ? 0.55 : 0.15))
-                                    .frame(width: 18, height: max(5, 40 * CGFloat(v / peak)))
-                                Text(dayLetter(week[i].day))
-                                    .font(.notchMono(8))
-                                    .foregroundStyle(isToday ? settings.accent : Color.white.opacity(0.4))
+            // Heatmap GitHub: 12 semanas de ritmo de un vistazo.
+            let heat = heatColumns()
+            if heat.flatMap({ $0 }).contains(where: { $0.seconds > 0 }) {
+                let peak = max(heat.flatMap({ $0 }).map(\.seconds).max() ?? 1, 1)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top, spacing: 4) {
+                        ForEach(heat.indices, id: \.self) { c in
+                            VStack(spacing: 2) {
+                                Text(monthMark(heat, c))
+                                    .font(.notchMono(7))
+                                    .foregroundStyle(Color.white.opacity(0.35))
+                                    .frame(height: 9)
+                                VStack(spacing: 3) {
+                                    ForEach(heat[c].indices, id: \.self) { r in
+                                        let cell = heat[c][r]
+                                        if let d = cell.day {
+                                            RoundedRectangle(cornerRadius: 3)
+                                                .fill(heatColor(cell.seconds, peak: peak))
+                                                .frame(width: 21, height: 21)
+                                                .help("\(dayLabel(d)): \(formatActive(cell.seconds))")
+                                        } else {
+                                            RoundedRectangle(cornerRadius: 3)
+                                                .fill(Color.clear)
+                                                .frame(width: 21, height: 21)
+                                        }
+                                    }
+                                }
                             }
-                            .frame(maxWidth: .infinity)
-                            .help("\(dayLabel(week[i].day)): \(formatActive(v))")
                         }
+                        Spacer(minLength: 0)
                     }
-                    if let best = week.max(by: { $0.seconds < $1.seconds }), best.seconds > 0 {
-                        Text(tr("act.bestDay", dayLabel(best.day), formatActive(best.seconds)))
-                            .font(.notchMono(9))
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Text(tr("act.less"))
+                            .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
+                        ForEach(0..<5, id: \.self) { b in
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(b == 0 ? Color.white.opacity(0.08) : settings.accent.opacity([0.25, 0.45, 0.7, 1.0][b - 1]))
+                                .frame(width: 10, height: 10)
+                        }
+                        Text(tr("act.more"))
+                            .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
+                        Spacer()
+                        if let best = weekBest() {
+                            Text(tr("act.bestDay", dayLabel(best.day), formatActive(best.seconds)))
+                                .font(.notchMono(9))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .padding(12)
@@ -242,9 +264,44 @@ struct ActivityView: View {
             )
     }
 
-    private func dayLetter(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = .current; f.dateFormat = "EEEEE"
-        return f.string(from: d)
+    // MARK: - Heatmap (GitHub): 12 semanas × 7 días, domingo primero.
+
+    private typealias HeatCell = (day: Date?, seconds: TimeInterval)
+
+    private func heatColumns(days: Int = 84) -> [[HeatCell]] {
+        let ordered = store.secondsPerDay(last: days).reversed() // viejo → nuevo
+        guard let first = ordered.first else { return [] }
+        let cal = Calendar.current
+        let lead = (cal.component(.weekday, from: first.day) - 1 + 7) % 7
+        var cells: [HeatCell] = Array(repeating: (nil, 0), count: lead)
+        cells += ordered.map { ($0.day, $0.seconds) }
+        while cells.count % 7 != 0 { cells.append((nil, 0)) }
+        return stride(from: 0, to: cells.count, by: 7).map { Array(cells[$0..<min($0 + 7, cells.count)]) }
+    }
+
+    private func heatColor(_ v: TimeInterval, peak: TimeInterval) -> Color {
+        guard v > 0, peak > 0 else { return Color.white.opacity(0.08) }
+        let t = v / peak
+        let bucket = min(4, max(1, Int(ceil(t * 4))))
+        return settings.accent.opacity([0.25, 0.45, 0.7, 1.0][bucket - 1])
+    }
+
+    private func monthMark(_ heat: [[HeatCell]], _ col: Int) -> String {
+        let days = heat[col].compactMap(\.day)
+        guard let d = days.first else { return " " }
+        let f = DateFormatter(); f.locale = .current; f.dateFormat = "MMM"
+        let label = f.string(from: d)
+        if col == 0 { return label }
+        let prevDays = heat[col - 1].compactMap(\.day)
+        guard let p = prevDays.first else { return label }
+        let pf = DateFormatter(); pf.locale = .current; pf.dateFormat = "MMM"
+        return pf.string(from: p) == label ? " " : label
+    }
+
+    private func weekBest() -> (day: Date, seconds: TimeInterval)? {
+        let week = store.secondsPerDay(last: 7)
+        guard let best = week.max(by: { $0.seconds < $1.seconds }), best.seconds > 0 else { return nil }
+        return best
     }
 
     private func dayLabel(_ d: Date) -> String {
