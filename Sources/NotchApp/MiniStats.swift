@@ -461,7 +461,7 @@ struct StatsView: View {
                 Spacer()
                 Text(chip).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.35))
             }
-            HStack(alignment: .top, spacing: 0) {
+            HStack(alignment: .center, spacing: 0) {
                 // Carril CPU.
                 VStack(spacing: 6) {
                     LaneGauge(value: "\(Int((snap.cpuUser + snap.cpuSys).rounded()))%",
