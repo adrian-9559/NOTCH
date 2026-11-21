@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lights = NotchLightsController()
     private var aura = NotchAuraController()
     private var toast = MusicToastController()
+    private var agentToast = AgentToastController()
+    /// Último estado visto por agente: para avisar al terminar.
+    private var lastAgentStatus: [AgentID: AgentStatus] = [:]
     private var hover = NotchHoverController()
     private var notchAnchorX: CGFloat?
     private var notchTopY: CGFloat?
@@ -41,7 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
 
         NotchContext.shared.store = store
-        store.onChange = { HistoryStore.shared.record($0) }
+        store.onChange = { [weak self] fresh in
+            HistoryStore.shared.record(fresh)
+            self?.announceFinished(fresh)
+        }
         AppFonts.register()
         MiniTabs.register()
         configureScreens()
@@ -100,7 +106,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPanel() {
         toast.hide()
+        agentToast.hide()
         windowController?.show(anchorX: notchAnchorX, topY: notchTopY)
+    }
+
+    /// Avisa con píldora (como la de música) cuando un agente termina:
+    /// transición working/waiting → done.
+    private func announceFinished(_ fresh: [AgentSession]) {
+        for s in fresh {
+            let prev = lastAgentStatus[s.agent]
+            lastAgentStatus[s.agent] = s.status
+            guard s.status == .done,
+                  prev == .working || prev == .waiting else { continue }
+            agentToast.show(session: s)
+        }
     }
 
     private func hidePanel() {
@@ -164,6 +183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // El aviso de canción nueva sale del notch si el panel no está abierto.
         toast.isPanelVisible = { [weak self] in self?.windowController?.isVisible == true }
         toast.rebuild(notches: notches)
+        agentToast.isPanelVisible = { [weak self] in self?.windowController?.isVisible == true }
+        agentToast.rebuild(notches: notches)
     }
 
     // MARK: - Hover: abrir al subir el ratón, cerrar al sacarlo
