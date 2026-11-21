@@ -36,6 +36,10 @@ final class NotchSettings: ObservableObject {
     @Published var agentToastEnabled: Bool {
         didSet { save() }
     }
+    /// Auto-enviar tareas nuevas al crearlas (si no, botón Enviar).
+    @Published var autoSendTasks: Bool {
+        didSet { save() }
+    }
     /// Idioma de NOTCH (es/en/fr/de).
     @Published var langCode: String {
         didSet { save() }
@@ -63,6 +67,7 @@ final class NotchSettings: ObservableObject {
             .filter { Self.tabTitles.contains($0) }
         songToastEnabled = d.object(forKey: "notchSongToast") as? Bool ?? true
         agentToastEnabled = d.object(forKey: "notchAgentToast") as? Bool ?? true
+        autoSendTasks = d.object(forKey: "notchAutoSendTasks") as? Bool ?? false
         langCode = d.string(forKey: "notchLang") ?? NotchLang.system().rawValue
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
@@ -101,6 +106,7 @@ final class NotchSettings: ObservableObject {
         d.set(hiddenTabs, forKey: "notchHiddenTabs")
         d.set(songToastEnabled, forKey: "notchSongToast")
         d.set(agentToastEnabled, forKey: "notchAgentToast")
+        d.set(autoSendTasks, forKey: "notchAutoSendTasks")
         d.set(langCode, forKey: "notchLang")
     }
 }

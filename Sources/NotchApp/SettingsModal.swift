@@ -255,6 +255,12 @@ struct SettingsModalView: View {
                     isOn: $settings.agentToastEnabled,
                     accent: settings.accent
                 ) {}
+                SettingsToggleRow(
+                    label: tr("set.taskAuto"),
+                    subtitle: tr("set.taskAutoSub"),
+                    isOn: $settings.autoSendTasks,
+                    accent: settings.accent
+                ) {}
                 VStack(alignment: .leading, spacing: 4) {
                     Text(tr("set.vault"))
                         .font(.notchMono(10))

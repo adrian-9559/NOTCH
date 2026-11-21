@@ -37,7 +37,7 @@ enum MiniTabs {
                     Divider()
                     HistoryView()
                 })),
-                (title: NotchTab.tasks.rawValue, view: AnyView(TasksView(tasks: ctx.tasks))),
+                (title: NotchTab.tasks.rawValue, view: AnyView(TasksView(tasks: ctx.tasks, sessions: store))),
                 // La ⚙ ya no es pestaña: abre el modal SettingsWindowController
                 // desde el botón de la navbar.
             ]

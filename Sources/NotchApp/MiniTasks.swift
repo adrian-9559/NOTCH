@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import Foundation
 import NotchCore
 import SwiftUI
@@ -42,6 +43,8 @@ struct AgentTask: Identifiable, Codable, Equatable {
 
 final class TaskStore: ObservableObject {
     @Published private(set) var tasks: [AgentTask] = []
+    /// Último error de envío (se muestra en la cabecera).
+    @Published var lastError: String = ""
 
     private func tasksFile() -> URL {
         let dir = FileManager.default.homeDirectoryForCurrentUser
@@ -144,12 +147,47 @@ final class TaskStore: ObservableObject {
     }
 }
 
+// MARK: - Envío a agentes (A3): manual por defecto + auto-envío opcional
+
+/// Entrega la tarea al agente por los canales existentes (iTerm directo,
+/// reply del notch o portapapeles + focus). Marca enviada y en curso.
+enum TaskDispatcher {
+    @discardableResult
+    static func send(_ task: AgentTask, via sessions: SessionStore, store: TaskStore) -> Bool {
+        let session: AgentSession?
+        if let a = task.agent {
+            session = sessions.sessions.first { $0.agent == a }
+        } else {
+            session = sessions.active.first ?? sessions.sessions.first
+        }
+        guard let s = session else {
+            store.lastError = tr("task.noSession")
+            return false
+        }
+        let msg = task.detail.isEmpty ? task.title : "\(task.title)\n\(task.detail)"
+        if !HandoffService.deliver(path: msg, to: s) {
+            // Fallback: al portapapeles + ventana al frente para pegar.
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(msg, forType: .string)
+            ReplyService.shared.focus(session: s)
+        }
+        var t = task
+        t.sentAt = Date()
+        if t.status == .todo { t.status = .doing }
+        store.update(t)
+        store.lastError = ""
+        return true
+    }
+}
+
 // MARK: - Vista (A2): lista estilo Notion con filtros y reorden
 
 /// Pestaña Tareas: crear, filtrar por estado/agente, reordenar con ↑↓,
 /// archivar y eliminar. El envío a agentes llega en A3.
 struct TasksView: View {
     @ObservedObject var tasks: TaskStore
+    var sessions: SessionStore?
     @ObservedObject private var settings = NotchSettings.shared
     @State private var showAdd = false
     @State private var title = ""
@@ -178,6 +216,8 @@ struct TasksView: View {
                         .background(Capsule().fill(settings.accent.opacity(0.15)))
                 }
                 Spacer()
+                Toggle(tr("task.auto"), isOn: $settings.autoSendTasks)
+                    .font(.caption2).toggleStyle(.switch).controlSize(.mini)
                 Button {
                     showAdd.toggle()
                     if !showAdd { resetForm() }
@@ -186,6 +226,9 @@ struct TasksView: View {
                         .font(.system(size: 11, weight: .bold))
                 }
                 .buttonStyle(.bordered).controlSize(.small)
+            }
+            if !tasks.lastError.isEmpty {
+                Text(tasks.lastError).font(.caption2).foregroundStyle(.red.opacity(0.9)).lineLimit(1)
             }
             if showAdd {
                 addForm
@@ -217,7 +260,7 @@ struct TasksView: View {
             } else {
                 ForEach(shown) { task in
                     TaskRow(
-                        task: task, store: tasks,
+                        task: task, store: tasks, sessions: sessions,
                         expanded: expanded == task.id,
                         onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
                     )
@@ -251,11 +294,14 @@ struct TasksView: View {
                 .frame(maxWidth: 220)
                 Spacer()
                 Button(tr("task.add")) {
-                    if tasks.add(title: title, detail: detail,
+                    guard let created = tasks.add(title: title, detail: detail,
                                  agent: agentRaw.flatMap(AgentID.init(rawValue:)),
-                                 priority: priority) != nil {
-                        resetForm()
-                        showAdd = false
+                                 priority: priority) else { return }
+                    resetForm()
+                    showAdd = false
+                    tasks.lastError = ""
+                    if settings.autoSendTasks, let ss = sessions {
+                        TaskDispatcher.send(created, via: ss, store: tasks)
                     }
                 }
                 .controlSize(.small).buttonStyle(.borderedProminent)
@@ -277,6 +323,7 @@ private struct TaskRow: View {
     var task: AgentTask
     @ObservedObject var store: TaskStore
     @ObservedObject private var settings = NotchSettings.shared
+    var sessions: SessionStore?
     var expanded: Bool
     var onToggleExpand: () -> Void
 
@@ -326,6 +373,13 @@ private struct TaskRow: View {
                 HStack(spacing: 3) {
                     Text(statusLine).font(.caption2).foregroundStyle(.secondary)
                     Spacer()
+                    if task.isOpen, sessions != nil {
+                        Button(tr("task.send")) {
+                            if let ss = sessions {
+                                TaskDispatcher.send(task, via: ss, store: store)
+                            }
+                        }.controlSize(.mini).buttonStyle(.borderedProminent)
+                    }
                     Button(tr("task.up")) { move(-1) }.controlSize(.mini)
                     Button(tr("task.down")) { move(1) }.controlSize(.mini)
                     Button(task.status == .archived ? tr("task.unarchive") : tr("task.archive")) {

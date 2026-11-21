@@ -12,6 +12,8 @@ struct NotchRootView: View {
     @ObservedObject private var settings = NotchSettings.shared
     /// Color de la canción que suena: ilumina el panel (lavado Lumio).
     @ObservedObject private var music = NotchContext.shared.music
+    /// Tareas abiertas (insignia en la navbar).
+    @ObservedObject private var taskStore = NotchContext.shared.tasks
     var extraTabs: [(title: String, view: AnyView)] = []
     /// Ancho del notch físico: dibuja la pestaña negra que lo continúa.
     /// nil = Mac sin notch (sin pestaña).
@@ -97,6 +99,13 @@ struct NotchRootView: View {
                             Text(store.active.isEmpty ? tr("nav.idle") : "\(store.active.count) \(tr("nav.active"))")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color.white.opacity(0.8))
+                            if taskStore.openCount > 0 {
+                                Text("\(taskStore.openCount) \(tr("task.title").lowercased())")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(settings.accent)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Capsule().fill(settings.accent.opacity(0.15)))
+                            }
                             Button {
                                 SettingsWindowController.shared.show()
                             } label: {
