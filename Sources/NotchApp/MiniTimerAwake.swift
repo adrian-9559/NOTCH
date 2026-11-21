@@ -2,45 +2,137 @@
 import Combine
 import SwiftUI
 
-// MARK: - Timer (rueda/ajuste + anillo + pausa para ojos)
+// MARK: - Timer (reloj grande + cronómetro + pausa + eye rest)
 
 final class FocusTimerStore: ObservableObject {
     @Published var minutes = 20
     @Published var remaining: TimeInterval = 0
+    @Published var elapsed: TimeInterval = 0
     @Published var running = false
+    @Published var paused = false
+    @Published var stopwatch = false
+    @Published var eyeRest = true
     @Published var finishedMessage = ""
     private var timer: Timer?
 
     func start() {
-        remaining = TimeInterval(minutes * 60)
+        stopTick()
+        if stopwatch {
+            elapsed = 0
+        } else {
+            remaining = TimeInterval(minutes * 60)
+        }
         running = true
+        paused = false
         finishedMessage = ""
-        timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.remaining -= 1
-            if self.remaining <= 0 {
-                self.stop()
-                self.finishedMessage = tr("focus.rest")
-                NSSound.beep()
+            self?.tick()
+        }
+    }
+
+    private func tick() {
+        if stopwatch {
+            elapsed += 1
+        } else {
+            remaining -= 1
+            if remaining <= 0 {
+                stop()
+                if eyeRest {
+                    finishedMessage = tr("focus.rest")
+                    NSSound.beep()
+                } else {
+                    finishedMessage = tr("focus.ready")
+                }
             }
+        }
+    }
+
+    func pause() {
+        paused = true
+        stopTick()
+    }
+
+    func resume() {
+        guard running, paused else { return }
+        paused = false
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.tick()
         }
     }
 
     func stop() {
         running = false
-        timer?.invalidate()
+        paused = false
+        stopTick()
     }
 
+    private func stopTick() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    /// Fracción del anillo: lo que queda (timer) o barrido del minuto (cronómetro).
     var progress: Double {
+        if stopwatch {
+            return (elapsed / 60).truncatingRemainder(dividingBy: 1)
+        }
         let total = Double(minutes * 60)
         guard total > 0 else { return 0 }
         return max(0, min(1, remaining / total))
     }
 
     var label: String {
+        if stopwatch {
+            let e = Int(elapsed)
+            if e >= 3600 { return String(format: "%d:%02d:%02d", e / 3600, (e % 3600) / 60, e % 60) }
+            return String(format: "%d:%02d", e / 60, e % 60)
+        }
         let m = Int(remaining) / 60, s = Int(remaining) % 60
         return String(format: "%d:%02d", m, s)
+    }
+
+    var totalLabel: String {
+        stopwatch ? "∞" : "\(minutes) min"
+    }
+}
+
+/// Anillo de reloj grande estilo Lumio: ticks + arco verde + tiempo.
+struct TimerRing: View {
+    var progress: Double
+    var time: String
+    var total: String
+    var color: Color = Color(hex: "2F9E6E")
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<60, id: \.self) { i in
+                let big = i % 5 == 0
+                Capsule()
+                    .fill(Color.white.opacity(big ? 0.5 : 0.22))
+                    .frame(width: big ? 2.5 : 1.5, height: big ? 9 : 5)
+                    .offset(y: -66)
+                    .rotationEffect(.degrees(Double(i) * 6))
+            }
+            Circle()
+                .stroke(Color.white.opacity(0.08), lineWidth: 6)
+                .frame(width: 124, height: 124)
+            Circle()
+                .trim(from: 0, to: max(progress, 0.012))
+                .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                .frame(width: 124, height: 124)
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 0.9), value: progress)
+            VStack(spacing: 1) {
+                Text(time)
+                    .font(.notchMono(24))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                Text(total)
+                    .font(.notchMono(10))
+                    .foregroundStyle(Color.white.opacity(0.45))
+            }
+        }
+        .frame(width: 148, height: 148)
     }
 }
 
@@ -48,32 +140,69 @@ struct TimerView: View {
     @ObservedObject var store: FocusTimerStore
     @ObservedObject private var settings = NotchSettings.shared
     var body: some View {
-        VStack(spacing: 6) {
-            Text(tr("focus.timer")).font(.notchMono(11)).foregroundStyle(.secondary)
-            ZStack {
-                ProgressView(value: store.progress)
-                    .progressViewStyle(.circular)
-                    .scaleEffect(1.7)
-                    .padding(10)
-                Text(store.running ? store.label : tr("focus.min", store.minutes))
-                    .font(.notchMono(14))
+        VStack(spacing: 8) {
+            // Timer | Cronómetro, como Lumio.
+            Picker("", selection: $store.stopwatch) {
+                Text("Timer").tag(false)
+                Text(tr("focus.stopwatch")).tag(true)
             }
-            Stepper(tr("focus.minutes", store.minutes), value: $store.minutes, in: 1...180, step: 5)
-                .font(.caption).disabled(store.running)
-            HStack {
-                ForEach([5, 20, 25, 50], id: \.self) { m in
-                    Button("\(m)'") { store.minutes = m }.controlSize(.mini)
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+            .disabled(store.running)
+            .onChange(of: store.stopwatch) { _ in store.stop() }
+
+            TimerRing(progress: store.progress, time: store.running ? store.label : store.stopwatch ? "0:00" : "\(store.minutes):00", total: store.running ? store.totalLabel : "\(store.minutes) min")
+
+            if !store.stopwatch {
+                // Presets + ajuste fino (±1 min).
+                HStack(spacing: 6) {
+                    ForEach([15, 25, 50, 90], id: \.self) { m in
+                        if store.minutes == m, !store.running {
+                            Button("\(m)") {}.controlSize(.small).buttonStyle(.borderedProminent).disabled(true)
+                        } else {
+                            Button("\(m)") { store.minutes = m }.controlSize(.small).buttonStyle(.bordered)
+                                .disabled(store.running)
+                        }
+                    }
+                }
+                Stepper(tr("focus.minutes", store.minutes), value: $store.minutes, in: 1...180, step: 1)
+                    .font(.caption).disabled(store.running)
+            }
+
+            // Controles según estado.
+            HStack(spacing: 6) {
+                if !store.running {
+                    Button {
+                        store.start()
+                    } label: {
+                        Label(tr("focus.start"), systemImage: "play.fill")
+                    }
+                    .controlSize(.small).buttonStyle(.borderedProminent)
+                } else if store.paused {
+                    Button(tr("focus.resume")) { store.resume() }
+                        .controlSize(.small).buttonStyle(.borderedProminent)
+                    Button(tr("focus.stop")) { store.stop() }
+                        .controlSize(.small).buttonStyle(.bordered)
+                } else {
+                    Button(tr("focus.pause")) { store.pause() }
+                        .controlSize(.small).buttonStyle(.borderedProminent)
+                    Button(tr("focus.stop")) { store.stop() }
+                        .controlSize(.small).buttonStyle(.bordered)
                 }
                 Spacer()
-                if store.running {
-                    Button(tr("focus.stop")) { store.stop() }.controlSize(.small)
-                } else {
-                    Button(tr("focus.start")) { store.start() }.controlSize(.small).buttonStyle(.borderedProminent)
+                if !store.stopwatch {
+                    Toggle(tr("focus.eyeRest"), isOn: $store.eyeRest)
+                        .font(.caption2).toggleStyle(.switch).controlSize(.mini)
+                        .tint(.green)
                 }
             }
-            .buttonStyle(.bordered)
             if !store.finishedMessage.isEmpty {
-                Text(store.finishedMessage).font(.callout)
+                HStack(spacing: 6) {
+                    Text(store.finishedMessage).font(.callout)
+                    Spacer()
+                    Button(tr("focus.repeat")) { store.start() }
+                        .controlSize(.mini).buttonStyle(.bordered)
+                }
             }
         }
         .padding(8)
