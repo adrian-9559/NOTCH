@@ -12,6 +12,7 @@ final class NotchContext {
     let awake = AwakeStore()
     let quickNote = QuickNoteStore()
     let music = MusicStore()
+    let tasks = TaskStore()
 }
 
 enum MiniTabs {
@@ -36,6 +37,7 @@ enum MiniTabs {
                     Divider()
                     HistoryView()
                 })),
+                (title: NotchTab.tasks.rawValue, view: AnyView(TasksView(tasks: ctx.tasks))),
                 // La ⚙ ya no es pestaña: abre el modal SettingsWindowController
                 // desde el botón de la navbar.
             ]
