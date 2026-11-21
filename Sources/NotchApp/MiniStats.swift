@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import Darwin
 import SwiftUI
 
@@ -10,6 +11,18 @@ import SwiftUI
 struct ProcTop {
     var name: String
     var pct: Double // % de capacidad total (ps/núcleos)
+    var pid: Int32 = 0
+    var memMB: Double = 0
+    var user: String = ""
+    var etime: String = ""
+}
+
+struct BatteryDetails {
+    var healthPct: Double = 100
+    var cycles: Int = 0
+    var watts: Double = 0 // + cargando, - descargando
+    var minutesLeft: Int = 0
+    var charging: Bool = false
 }
 
 struct AgentServer {
@@ -32,6 +45,7 @@ struct MacPanelSnapshot {
     var selfCpu = 0.0, selfMB = 0.0
     var chip = ""
     var eCores = 0, pCores = 0
+    var batt = BatteryDetails()
 }
 
 enum MacPanelReader {
@@ -86,15 +100,20 @@ enum MacPanelReader {
     /// Caro (ps, lsof, swap, huella): cada 6 s en background.
     static func readHeavy(into s: inout MacPanelSnapshot, agentPids: [Int32: String]) {
         let ncpu = max(1, Double(ProcessInfo.processInfo.activeProcessorCount))
-        // Top procesos por CPU.
-        if let out = run("/bin/ps", ["-Ao", "pcpu,pid,comm", "-r", "-c"]) {
+        // Top procesos por CPU (con PID, MEM, usuario y tiempo).
+        if let out = run("/bin/ps", ["-Ao", "pcpu,rss,pid,user,etime,comm", "-r", "-c"]) {
             var tops: [ProcTop] = []
-            for line in out.split(separator: "\n").dropFirst().prefix(6) {
+            for line in out.split(separator: "\n").dropFirst().prefix(8) {
                 let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-                guard parts.count >= 3, let raw = num(parts[0]) else { continue }
-                let name = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard parts.count >= 6, let raw = num(parts[0]) else { continue }
+                let name = String(parts[5]).trimmingCharacters(in: .whitespacesAndNewlines)
                 if name == "ps" || name.hasSuffix("(NOTCH)") { continue }
-                tops.append(ProcTop(name: shortProc(name), pct: raw / ncpu))
+                let memKB = Double(parts[1].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+                tops.append(ProcTop(
+                    name: shortProc(name), pct: raw / ncpu,
+                    pid: Int32(parts[2]) ?? 0, memMB: memKB / 1024,
+                    user: String(parts[3]), etime: String(parts[4])
+                ))
                 if tops.count == 4 { break }
             }
             s.tops = tops
@@ -122,6 +141,30 @@ enum MacPanelReader {
                 s.selfMB = (Double(parts[1].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0) / 1024
             }
         }
+        // Batería extendida (ioreg, sin sudo).
+        s.batt = readBattery()
+    }
+
+    /// Salud, ciclos, potencia, tiempo restante y estado de la batería.
+    static func readBattery() -> BatteryDetails {
+        var b = BatteryDetails()
+        guard let out = run("/usr/sbin/ioreg", ["-rn", "AppleSmartBattery"]) else { return b }
+        func num1(_ pattern: String) -> Double? {
+            guard let r = out.range(of: pattern, options: .regularExpression) else { return nil }
+            let digits = out[r].replacingOccurrences(of: "[^0-9-]", with: "", options: .regularExpression)
+            return Double(digits)
+        }
+        if let full = num1(#""FullChargeCapacity"=(\d+)"#),
+           let design = num1(#""DesignCapacity"=(\d+)"#), design > 0 {
+            b.healthPct = full / design * 100
+        }
+        b.cycles = Int(num1(#""CycleCount" = (\d+)"#) ?? 0)
+        let amps = num1(#""Amperage" = (-?\d+)"#) ?? 0
+        let volts = num1(#""Voltage" = (\d+)"#) ?? 0
+        b.watts = amps * volts / 1_000_000
+        b.minutesLeft = Int(num1(#""TimeRemaining" = (\d+)"#) ?? 0)
+        b.charging = out.contains(#""IsCharging" = Yes"#)
+        return b
     }
 
     // MARK: - servidores
@@ -195,9 +238,12 @@ enum MacPanelReader {
         let pipe = Pipe(); p.standardOutput = pipe
         p.standardError = FileHandle.nullDevice
         guard (try? p.run()) != nil else { return nil }
+        // Leer ANTES de esperar: si la salida supera el buffer del pipe
+        // (64 KB), esperar primero cuelga al hijo escribiendo (deadlock).
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         guard p.terminationStatus == 0 else { return nil }
-        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+        return String(data: data, encoding: .utf8)
     }
 
     static func sysctlString(_ key: String) -> String? {
@@ -245,6 +291,9 @@ struct StatsView: View {
     @State private var memGB: Double = 16
     @State private var eCores = 0
     @State private var pCores = 0
+    /// Proceso desplegado (detalle + terminar).
+    @State private var expandedPid: Int32 = 0
+    @StateObject private var junk = JunkStore()
     private let light = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
     private let heavy = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
 
@@ -285,14 +334,50 @@ struct StatsView: View {
             Text("WHAT LOADS THE MAC").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
             loadBar
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
-                ForEach(loadRows, id: \.name) { r in
-                    HStack(spacing: 6) {
-                        RoundedRectangle(cornerRadius: 2).fill(r.color).frame(width: 9, height: 9)
-                        Text(r.name).font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
-                        Spacer()
-                        Text("\(Int(r.pct.rounded()))%").font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
+                ForEach(loadTops, id: \.name) { t in
+                    Button {
+                        expandedPid = expandedPid == t.pid ? 0 : t.pid
+                    } label: {
+                        HStack(spacing: 6) {
+                            RoundedRectangle(cornerRadius: 2).fill(loadColor(t)).frame(width: 9, height: 9)
+                            Text(t.name).font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+                            Spacer()
+                            Text(verbatim: "\(Int(t.pct.rounded()))%").font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(Color.white.opacity(0.3))
+                                .rotationEffect(.degrees(expandedPid == t.pid ? 90 : 0))
+                        }
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(expandedPid == t.pid ? Color.white.opacity(0.09) : Color.white.opacity(0.03))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Detalle de \(t.name)")
+                    .help("Detalle del proceso")
+                }
+            }
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.3)).frame(width: 9, height: 9)
+                Text("macOS & the rest").font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+                Spacer()
+                Text(verbatim: "\(Int(loadRest.rounded()))%").font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
+            }
+            // Detalle del proceso desplegado: para entender y optimizar.
+            if let t = loadTops.first(where: { $0.pid == expandedPid }) {
+                HStack(spacing: 8) {
+                    Text(verbatim: "PID \(t.pid) · \(Int(t.memMB.rounded())) MB · \(t.user) · \(t.etime)")
+                        .font(.notchMono(10)).foregroundStyle(.secondary).lineLimit(1)
+                    Spacer()
+                    if t.pid > 500 {
+                        Button("Terminar") { confirmStop(t) }
+                            .controlSize(.mini).buttonStyle(.bordered)
                     }
                 }
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
             }
             // Servidores de agentes (máx. 5 + resto, como Lumio).
             Text(snap.servers.count > 5 ? "AGENT SERVERS +\(snap.servers.count - 5)" : "AGENT SERVERS")
@@ -314,6 +399,16 @@ struct StatsView: View {
                     .font(.caption)
                 }
             }
+            // Batería extendida: salud, ciclos, potencia y tiempo.
+            Text("BATERÍA").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
+                battCell("Salud", battHealthText, battHealthColor)
+                battCell("Ciclos", snap.batt.cycles > 0 ? "\(snap.batt.cycles)" : "—", .white.opacity(0.85))
+                battCell("Potencia", snap.batt.watts == 0 ? "—" : String(format: "%+.0f W", snap.batt.watts), .white.opacity(0.85))
+                battCell("Restan", battTimeText, .white.opacity(0.85))
+            }
+            // Limpieza de datos temporales de agentes (solo parados).
+            JunkSectionView(store: sessions, junk: junk)
             Text("NOTCH itself uses \(String(format: "%.0f", snap.selfCpu))% · \(String(format: "%.0f", snap.selfMB)) MB")
                 .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.35))
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -325,6 +420,7 @@ struct StatsView: View {
             memGB = info.memGB; eCores = info.e; pCores = info.p
             refreshLight()
             refreshHeavy()
+            junk.scan()
         }
         .onReceive(light) { _ in refreshLight() }
         .onReceive(heavy) { _ in refreshHeavy() }
@@ -403,13 +499,59 @@ struct StatsView: View {
         .frame(height: 8)
     }
 
-    private var loadRows: [(name: String, pct: Double, color: Color)] {
-        var rows = snap.tops.prefix(3).enumerated().map { i, t in
-            (t.name, t.pct, [Color(hex: "2F9E6E"), Color(hex: "2F9E6E").opacity(0.65), Color(hex: "2F9E6E").opacity(0.4)][i % 3])
+    private var loadTops: [ProcTop] { Array(snap.tops.prefix(3)) }
+
+    private var loadRest: Double {
+        let sum = loadTops.reduce(0) { $0 + $1.pct }
+        return max(0, totalCpu - sum)
+    }
+
+    private func loadColor(_ t: ProcTop) -> Color {
+        let i = loadTops.firstIndex { $0.name == t.name } ?? 0
+        return [Color(hex: "2F9E6E"), Color(hex: "2F9E6E").opacity(0.65), Color(hex: "2F9E6E").opacity(0.4)][i % 3]
+    }
+
+    /// Terminar con confirmación (solo PIDs de usuario, nunca sistema).
+    private func confirmStop(_ t: ProcTop) {
+        let a = NSAlert()
+        a.messageText = "Terminar \(t.name)?"
+        a.informativeText = "PID \(t.pid) · \(Int(t.memMB.rounded())) MB. Se envía SIGTERM."
+        a.addButton(withTitle: "Terminar")
+        a.addButton(withTitle: "Cancelar")
+        if a.runModal() == .alertFirstButtonReturn {
+            MacPanelReader.stopPid(t.pid)
+            refreshHeavy()
         }
-        let sum = snap.tops.prefix(3).reduce(0) { $0 + $1.pct }
-        rows.append(("macOS & the rest", max(0, totalCpu - sum), Color.white.opacity(0.3)))
-        return rows
+    }
+
+    // MARK: - batería extendida
+
+    private var battHealthText: String {
+        snap.batt.healthPct <= 0 ? "—" : "\(Int(snap.batt.healthPct.rounded()))%"
+    }
+
+    private var battHealthColor: Color {
+        let h = snap.batt.healthPct
+        if h <= 0 { return .white.opacity(0.35) }
+        if h >= 80 { return Color(hex: "2F9E6E") }
+        if h >= 60 { return Color(hex: "D9A514") }
+        return Color(hex: "E0574B")
+    }
+
+    private var battTimeText: String {
+        let m = snap.batt.minutesLeft
+        guard m > 0, m < 60000 else { return "—" }
+        return String(format: "%dh %02dm", m / 60, m % 60)
+    }
+
+    private func battCell(_ label: String, _ value: String, _ color: Color) -> some View {
+        HStack(spacing: 6) {
+            Text(label).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
+            Spacer()
+            Text(value).font(.notchMono(11)).foregroundStyle(color).monospacedDigit()
+        }
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
     }
 
     // MARK: - refrescos
@@ -463,6 +605,207 @@ struct LumioRing: View {
                 Text(value).font(.notchMono(17)).foregroundStyle(.white).monospacedDigit()
                 Text(sub).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.55)).lineLimit(1).minimumScaleFactor(0.8)
             }
+        }
+    }
+}
+
+// MARK: - Limpieza de datos temporales de agentes
+
+/// Una papelera candidata: etiqueta, rutas y tamaño medido.
+struct JunkRow: Identifiable {
+    let id: String
+    var agent: String
+    var label: String
+    var paths: [String]
+    var bytes: Int64 = 0
+}
+
+/// Basura regenerable de los agentes (historiales, snapshots, logs,
+/// cachés, worktrees, temporales). Solo existe si la ruta existe.
+/// La papelera del Finder lo hace recuperable; además solo se activa
+/// con todos los agentes parados.
+final class JunkStore: ObservableObject {
+    @Published var rows: [JunkRow] = []
+    @Published var scanning = false
+    @Published var lastCleaned = ""
+
+    /// Destinos conocidos por familia (se filtran los inexistentes).
+    static func targets() -> [(agent: String, rows: [(label: String, paths: [String])])] {
+        let h = FileManager.default.homeDirectoryForCurrentUser.path
+        let tmp = NSTemporaryDirectory()
+        return [
+            (agent: "OpenCode", rows: [
+                ("sesiones", ["\(h)/.local/share/opencode/opencode.db", "\(h)/.local/share/opencode/opencode.db-wal", "\(h)/.local/share/opencode/opencode.db-shm"]),
+                ("snapshots", ["\(h)/.local/share/opencode/snapshot"]),
+                ("worktrees", ["\(h)/.local/share/opencode/worktree"]),
+                ("logs", ["\(h)/.local/share/opencode/log"]),
+                ("shell", ["\(h)/.local/share/opencode/shell", "\(h)/.local/share/opencode/tool-output"]),
+                ("temporales", ["\(tmp)/opencode-pty-501"]),
+            ]),
+            (agent: "Codex", rows: [
+                ("logs", ["\(h)/.codex/logs_2.sqlite", "\(h)/.codex/logs_2.sqlite-shm", "\(h)/.codex/logs_2.sqlite-wal"]),
+                ("cola", ["\(h)/.codex/queue_1.sqlite", "\(h)/.codex/queue_1.sqlite-shm", "\(h)/.codex/queue_1.sqlite-wal"]),
+            ]),
+            (agent: "Claude", rows: [
+                ("sesiones", ["\(h)/.claude/sessions", "\(h)/.claude/session-env"]),
+                ("backups", ["\(h)/.claude/backups", "\(h)/.claude/ide"]),
+            ]),
+            (agent: "Cursor", rows: [
+                ("cachés", ["\(h)/Library/Application Support/Cursor/Cache", "\(h)/Library/Application Support/Cursor/logs", "\(h)/Library/Application Support/Cursor/Crashpad"]),
+                ("workspaces", ["\(h)/Library/Application Support/Cursor/User/workspaceStorage"]),
+            ]),
+            (agent: "VS Code", rows: [
+                ("cachés", ["\(h)/Library/Application Support/Code/Cache", "\(h)/Library/Application Support/Code/CachedData", "\(h)/Library/Application Support/Code/GPUCache", "\(h)/Library/Application Support/Code/logs", "\(h)/Library/Application Support/Code/Crashpad"]),
+                ("workspaces", ["\(h)/Library/Application Support/Code/User/workspaceStorage"]),
+            ]),
+            (agent: "Gemini", rows: [
+                ("temporales", ["\(h)/.gemini/tmp", "\(h)/.gemini/cache"]),
+            ]),
+        ]
+    }
+
+    /// Mide con `du` en background (rápido, sin permisos).
+    func scan() {
+        scanning = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            var out: [JunkRow] = []
+            let fm = FileManager.default
+            for fam in Self.targets() {
+                for r in fam.rows {
+                    let live = r.paths.filter { fm.fileExists(atPath: $0) }
+                    guard !live.isEmpty else { continue }
+                    let kb = Self.duKB(live)
+                    guard kb > 0 else { continue }
+                    out.append(JunkRow(id: "\(fam.agent)/\(r.label)", agent: fam.agent,
+                                       label: r.label, paths: live, bytes: kb * 1024))
+                }
+            }
+            out.sort { $0.bytes > $1.bytes }
+            DispatchQueue.main.async {
+                self.rows = out
+                self.scanning = false
+            }
+        }
+    }
+
+    static func duKB(_ paths: [String]) -> Int64 {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/du")
+        p.arguments = ["-sk"] + paths
+        let pipe = Pipe(); p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return 0 }
+        p.waitUntilExit()
+        let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return out.split(separator: "\n").compactMap { Int($0.split(separator: "\t").first ?? "") }.reduce(Int64(0)) { $0 + Int64($1) }
+    }
+
+    /// A la papelera del Finder (recuperable). Devuelve movidos y fallos.
+    @discardableResult
+    static func trash(paths: [String]) -> (moved: Int, failed: Int) {
+        var moved = 0, failed = 0
+        for path in paths {
+            do {
+                try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+                moved += 1
+            } catch {
+                failed += 1
+            }
+        }
+        return (moved, failed)
+    }
+
+    func trashRow(_ row: JunkRow) {
+        let r = Self.trash(paths: row.paths)
+        lastCleaned = r.failed == 0
+            ? "\(row.agent)/\(row.label) → papelera"
+            : "\(row.agent)/\(row.label): \(r.failed) fallos"
+        scan()
+    }
+
+    func trashAll() {
+        let all = rows.flatMap(\.paths)
+        let r = Self.trash(paths: all)
+        lastCleaned = r.failed == 0
+            ? "\(Self.formatBytes(allBytes)) → papelera"
+            : "Papelera con \(r.failed) fallos"
+        scan()
+    }
+
+    var allBytes: Int64 { rows.reduce(0) { $0 + $1.bytes } }
+
+    static func formatBytes(_ b: Int64) -> String {
+        if b >= 1_073_741_824 { return String(format: "%.1f GB", Double(b) / 1_073_741_824) }
+        if b >= 1_048_576 { return String(format: "%.0f MB", Double(b) / 1_048_576) }
+        return "\(max(1, Int(b / 1024))) MB"
+    }
+}
+
+/// Sección LIMPIEZA: qué basura hay por agente y botón para llevarla a
+/// la papelera. Solo activo con todos los agentes parados.
+struct JunkSectionView: View {
+    var store: SessionStore
+    @ObservedObject var junk: JunkStore
+
+    private var allIdle: Bool { store.active.isEmpty }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("LIMPIEZA").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
+                Spacer()
+                if junk.scanning {
+                    Text("midiendo…").font(.notchMono(10)).foregroundStyle(.secondary)
+                } else if !junk.rows.isEmpty {
+                    Text(JunkStore.formatBytes(junk.allBytes)).font(.notchMono(10)).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }
+            if junk.rows.isEmpty, !junk.scanning {
+                Text("sin basura de agentes").font(.caption).foregroundStyle(.secondary)
+            } else {
+                ForEach(junk.rows) { row in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(agentColor(for: row.agent, default: Color.gray))
+                            .frame(width: 7, height: 7)
+                        Text("\(row.agent) · \(row.label)")
+                            .font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+                        Spacer()
+                        Text(JunkStore.formatBytes(row.bytes))
+                            .font(.notchMono(10)).foregroundStyle(.secondary).monospacedDigit()
+                        Button {
+                            junk.trashRow(row)
+                        } label: {
+                            Image(systemName: "trash").font(.system(size: 10))
+                        }
+                        .buttonStyle(.bordered).controlSize(.mini)
+                        .disabled(!allIdle)
+                        .help(allIdle ? "A la papelera (recuperable)" : "Para cuando paren los agentes")
+                    }
+                }
+                Button(allIdle ? "Limpiar todo → papelera" : "Para cuando paren los agentes") {
+                    confirmClean()
+                }
+                .controlSize(.small).buttonStyle(.borderedProminent).tint(.red)
+                .disabled(!allIdle || junk.rows.isEmpty)
+            }
+            if !junk.lastCleaned.isEmpty {
+                Text(junk.lastCleaned).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
+    }
+
+    private func confirmClean() {
+        let a = NSAlert()
+        a.messageText = "Llevar \(JunkStore.formatBytes(junk.allBytes)) a la papelera?"
+        a.informativeText = "Basura regenerable de \(Set(junk.rows.map(\.agent)).sorted().joined(separator: ", ")) (historiales, snapshots, logs, cachés). Recuperable desde la papelera."
+        a.addButton(withTitle: "Limpiar")
+        a.addButton(withTitle: "Cancelar")
+        if a.runModal() == .alertFirstButtonReturn {
+            junk.trashAll()
         }
     }
 }

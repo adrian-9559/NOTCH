@@ -367,9 +367,11 @@ final class MusicStore: ObservableObject {
         let pipe = Pipe(); p.standardOutput = pipe
         p.standardError = FileHandle.nullDevice
         guard (try? p.run()) != nil else { return nil }
+        // Leer antes de esperar (evita deadlock si la salida crece).
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         guard p.terminationStatus == 0 else { return nil }
-        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+        return String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
