@@ -79,7 +79,7 @@ final class NotchLightsController {
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         p.hidesOnDeactivate = false
         p.ignoresMouseEvents = false
-        p.contentView = NSHostingView(rootView: NotchLightsView(store: store, alignRight: alignRight, onTap: onTap))
+        p.contentView = FirstMouseHostingView(rootView: NotchLightsView(store: store, alignRight: alignRight, onTap: onTap))
         return p
     }
 }

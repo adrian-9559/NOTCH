@@ -2,6 +2,13 @@
 import AppKit
 import SwiftUI
 
+/// NSHostingView que acepta el primer clic sin que la ventana sea key.
+/// Sin esto, el primer clic tras abrir el panel (hover) se lo come el
+/// sistema para activar la ventana: "clico y no hace nada".
+final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// Panel flotante bajo el notch: sin bordes, siempre visible,
 /// en todos los Spaces, sin robar foco (nonactivating).
 final class NotchPanel: NSPanel {
@@ -19,7 +26,7 @@ final class NotchPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         hidesOnDeactivate = false
         isMovableByWindowBackground = false
-        contentView = NSHostingView(rootView: content)
+        contentView = FirstMouseHostingView(rootView: content)
     }
 
     override var canBecomeKey: Bool { true }

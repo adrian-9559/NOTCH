@@ -87,12 +87,13 @@ struct NotchRootView: View {
                                 Image(systemName: "gearshape")
                                     .font(.system(size: 11, weight: .medium))
                                     .frame(width: 28, height: 19)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .fill(Color.white.opacity(0.10))
+                                    )
+                                    .padding(4)
                             }
                             .buttonStyle(.plain)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(Color.white.opacity(0.10))
-                            )
                             .foregroundStyle(Color.white.opacity(0.72))
                             .help("Ajustes de NOTCH")
                         }
@@ -258,17 +259,20 @@ private struct NavButton: View {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .medium))
                 .frame(width: 32, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(selected ? settings.accent : Color.white.opacity(0.10))
+                        .shadow(
+                            color: selected ? settings.accent.opacity(0.45) : .clear,
+                            radius: 6, y: 2
+                        )
+                )
                 .scaleEffect(selected ? 1.0 : 0.96)
+                // Área de clic más grande que la píldora visual: no se
+                // escapa el clic por los márgenes.
+                .padding(3)
         }
         .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selected ? settings.accent : Color.white.opacity(0.10))
-                .shadow(
-                    color: selected ? settings.accent.opacity(0.45) : .clear,
-                    radius: 6, y: 2
-                )
-        )
         .foregroundStyle(selected ? Color.white : Color.white.opacity(0.72))
         .help(title)
         .controlSize(.mini)
