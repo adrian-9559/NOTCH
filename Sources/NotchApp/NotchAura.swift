@@ -9,10 +9,13 @@ import SwiftUI
 struct NotchAuraView: View {
     @ObservedObject private var music = NotchContext.shared.music
 
+    /// Visible solo si suena música con color extraído.
+    private var showAura: Bool { music.playing && music.tint != nil }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                if music.playing, let tint = music.tint {
+                if showAura, let tint = music.tint {
                     // Halo elíptico centrado en el notch: se disipa a
                     // transparente en los bordes (sin rectángulos duros).
                     RadialGradient(
@@ -23,11 +26,14 @@ struct NotchAuraView: View {
                     )
                     .scaleEffect(x: 2.5, y: 1, anchor: .top)
                     .blur(radius: 4)
+                    // Fundido al ponerse y quitarse (pausa, cambio de
+                    // pista sin carátula, cierre del reproductor).
+                    .transition(.opacity)
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
-        .animation(.easeInOut(duration: 1.1), value: music.tint)
+        .animation(.easeInOut(duration: 1.2), value: showAura)
     }
 }
 

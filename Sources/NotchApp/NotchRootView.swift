@@ -77,7 +77,10 @@ struct NotchRootView: View {
                     // contenido debajo.
                     let sel = tabs.firstIndex { $0.title == selectedTitle } ?? 0
                     VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 5) {
+                        // Píldoras pequeñas arriba a la izquierda: el notch
+                        // físico tapa el centro del panel, así que toda la
+                        // fila (7 pestañas) cabe a su izquierda.
+                        HStack(spacing: 3) {
                             ForEach(tabs.indices, id: \.self) { i in
                                 NavButton(
                                     title: tabs[i].title,
@@ -111,7 +114,7 @@ struct NotchRootView: View {
                         }
                         .padding(.top, 12)
                         .padding(.bottom, 9)
-                        .padding(.horizontal, 14)
+                        .padding(.horizontal, 12)
 
                         // Separador fino a todo el ancho, como Lumio.
                         Rectangle()
@@ -307,20 +310,19 @@ private struct NavButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 11, weight: .medium))
-                .frame(width: 32, height: 22)
+                .font(.system(size: 10, weight: .medium))
+                .frame(width: 24, height: 18)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .fill(selected ? settings.accent : Color.white.opacity(0.10))
                         .shadow(
                             color: selected ? settings.accent.opacity(0.45) : .clear,
-                            radius: 6, y: 2
+                            radius: 4, y: 2
                         )
                 )
                 .scaleEffect(selected ? 1.0 : 0.96)
-                // Área de clic más grande que la píldora visual: no se
-                // escapa el clic por los márgenes.
-                .padding(3)
+                // Área de clic mayor que la píldora visual.
+                .padding(2)
         }
         .buttonStyle(.plain)
         .foregroundStyle(selected ? Color.white : Color.white.opacity(0.72))
