@@ -354,7 +354,6 @@ struct StatsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             measurementsCard
-                .padding(.top, -6)
             // Qué carga el Mac (plegable).
             sectionHeader(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total", folded: $foldLoads)
             if !foldLoads {

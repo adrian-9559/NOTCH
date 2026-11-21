@@ -143,7 +143,7 @@ struct NotchRootView: View {
                                 )
                         }
                         .frame(height: shownHeight)
-                        .padding(.top, 12)
+                        .padding(.top, 6)
                         .padding(.bottom, 14)
                         .padding(.horizontal, 16)
                         .onPreferenceChange(ContentHeightKey.self) { h in
