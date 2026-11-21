@@ -21,6 +21,18 @@ struct NotchRootView: View {
     var onOpen: (AgentSession) -> Void = { _ in }
     /// Pestaña seleccionada por título (sobrevive a reordenar/ocultar).
     @State private var selectedTitle = "Office"
+    /// Altura mostrada del área de contenido (se anima a mano: si se
+    /// usara withAnimation, la ventana saltaría al final de golpe).
+    @State private var shownHeight: CGFloat = 300
+    /// Altura natural medida de la pestaña seleccionada (con tope).
+    @State private var targetHeight: CGFloat = 300
+    /// La primera medición se aplica sin animación (al arrancar).
+    @State private var hasMeasured = false
+
+    /// Contenido entre estos límites: nada queda cortado por abajo y lo
+    /// sobrado (Office con ciudad, historial largo) sigue con scroll.
+    private let minContentHeight: CGFloat = 84
+    private let maxContentHeight: CGFloat = 340
 
     /// Pestañas visibles, en el orden configurado en Ajustes.
     private var visibleTabs: [(title: String, view: AnyView)] {
@@ -106,19 +118,57 @@ struct NotchRootView: View {
                             .fill(Color.white.opacity(0.16))
                             .frame(height: 1)
 
-                        // Altura fija + scroll: nada queda cortado arriba
-                        // ni se sale por abajo. Transición orgánica al
-                        // cambiar de pestaña (crossfade + micro-escala).
+                        // Altura según el contenido de cada pestaña: lo
+                        // que tiene poco (Música) encoge el panel y lo que
+                        // se desborda (Office con ciudad, historial) sigue
+                        // con scroll. La medición es natural (el ScrollView
+                        // propone altura infinita al contenido), así que no
+                        // hay bucle con la altura mostrada.
                         ScrollView {
                             tabs[sel].view
                                 .id(selectedTitle)
                                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                                 .frame(maxWidth: .infinity, alignment: .topLeading)
+                                .background(
+                                    GeometryReader { g in
+                                        Color.clear.preference(
+                                            key: ContentHeightKey.self,
+                                            value: g.size.height
+                                        )
+                                    }
+                                )
                         }
-                        .frame(height: 300)
+                        .frame(height: shownHeight)
                         .padding(.top, 12)
                         .padding(.bottom, 14)
                         .padding(.horizontal, 16)
+                        .onPreferenceChange(ContentHeightKey.self) { h in
+                            let clamped = min(max(h, minContentHeight), maxContentHeight)
+                            guard abs(clamped - targetHeight) > 0.5 else { return }
+                            targetHeight = clamped
+                            if !hasMeasured {
+                                hasMeasured = true
+                                shownHeight = clamped // primer ajuste: sin animar
+                            }
+                        }
+                        // Interpola shownHeight → targetHeight a 60 fps: la
+                        // ventana sigue cada frame y el filo superior queda
+                        // anclado bajo el notch (withAnimation haría saltar
+                        // la ventana al valor final de golpe).
+                        .task(id: targetHeight) {
+                            let from = shownHeight
+                            let to = targetHeight
+                            guard abs(from - to) > 0.5 else { return }
+                            let steps = 16
+                            for i in 1...steps {
+                                try? await Task.sleep(nanoseconds: 16_000_000)
+                                guard !Task.isCancelled else { return }
+                                let p = Double(i) / Double(steps)
+                                let eased = 1 - (1 - p) * (1 - p) * (1 - p) // ease-out
+                                shownHeight = from + (to - from) * CGFloat(eased)
+                            }
+                            shownHeight = to
+                        }
                     }
                 }
             }
@@ -277,6 +327,16 @@ private struct NavButton: View {
         .help(title)
         .controlSize(.mini)
         .animation(.snappy(duration: 0.22), value: selected)
+    }
+}
+
+/// Altura natural del contenido de la pestaña seleccionada (la mide
+/// GeometryReader dentro del ScrollView; reduce a la más alta si hay
+/// dos vistas midiendo a la vez durante el crossfade).
+private struct ContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
