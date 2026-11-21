@@ -194,8 +194,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Office: doble-tap de ⌘ derecha (con fallback al menú si no hay permiso)
 
     private func installOfficeHotKey() {
-        OfficeHotKey.shared.onDoubleTap = { [weak self] in
-            self?.toggleNotch()
+        OfficeHotKey.shared.onDoubleTap = {
+            OfficeWindowController.shared.show()
         }
         OfficeHotKey.shared.install()
         if OfficeHotKey.shared.isAvailable {

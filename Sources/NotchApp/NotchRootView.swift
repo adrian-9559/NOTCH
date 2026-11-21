@@ -32,7 +32,7 @@ struct NotchRootView: View {
     /// Contenido entre estos límites: nada queda cortado por abajo y lo
     /// sobrado (Office con ciudad, historial largo) sigue con scroll.
     private let minContentHeight: CGFloat = 84
-    private let maxContentHeight: CGFloat = 340
+    private let maxContentHeight: CGFloat = 360
 
     /// Pestañas visibles, en el orden configurado en Ajustes.
     private var visibleTabs: [(title: String, view: AnyView)] {
