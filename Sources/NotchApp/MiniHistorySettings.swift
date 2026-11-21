@@ -64,6 +64,13 @@ final class HistoryStore: ObservableObject {
         for e in events { lastByAgent[e.agent] = e.status }
     }
 
+    /// Vacía memoria y disco (Ajustes → Borrar datos).
+    func reset() {
+        events = []
+        lastByAgent = [:]
+        try? FileManager.default.removeItem(at: logFile())
+    }
+
     func hours(for day: Date) -> [(hour: Int, count: Int, agents: [String])] {
         let cal = Calendar.current
         let dayEvents = events.filter { cal.isDate($0.ts, inSameDayAs: day) && $0.status != "idle" }
@@ -71,6 +78,15 @@ final class HistoryStore: ObservableObject {
             let hs = dayEvents.filter { cal.component(.hour, from: $0.ts) == h }
             return (h, hs.count, Array(Set(hs.map(\.agent))))
         }
+    }
+
+    /// Actividad por hora rodante (últimas 24 h) para la gráfica del hub.
+    func last24h(now: Date = Date()) -> [Int] {
+        (0..<24).map { back in
+            let start = now.addingTimeInterval(-Double(back + 1) * 3600)
+            let end = now.addingTimeInterval(-Double(back) * 3600)
+            return events.filter { $0.ts >= start && $0.ts < end && $0.status != "idle" }.count
+        }.reversed()
     }
 }
 
@@ -117,6 +133,49 @@ struct HistoryView: View {
     private var dayName: String {
         let f = DateFormatter(); f.dateStyle = .medium
         return f.string(from: day)
+    }
+}
+
+// MARK: - Arranque con sesión (LaunchAgent, sin permisos)
+
+/// `~/Library/LaunchAgents/com.notch.app.plist` apuntando al ejecutable.
+/// Vale para el binario de desarrollo y para la app empaquetada.
+enum LaunchAtLogin {
+    static var plist: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents/com.notch.app.plist")
+    }
+
+    static func isEnabled() -> Bool {
+        FileManager.default.fileExists(atPath: plist.path)
+    }
+
+    static func set(_ on: Bool) {
+        if on {
+            let exe = Bundle.main.executablePath ?? CommandLine.arguments[0]
+            let dict: [String: Any] = [
+                "Label": "com.notch.app",
+                "ProgramArguments": [exe],
+                "RunAtLoad": true,
+            ]
+            try? FileManager.default.createDirectory(
+                at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
+            (dict as NSDictionary).write(to: plist, atomically: true)
+        } else {
+            try? FileManager.default.removeItem(at: plist)
+        }
+        // Recarga best-effort (si no está cargado, bootout falla y ya).
+        let uid = getuid()
+        for args in [["bootout", "gui/\(uid)/com.notch.app"],
+                     ["bootstrap", "gui/\(uid)", plist.path]] {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+            p.arguments = args
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            try? p.run()
+            p.waitUntilExit()
+        }
     }
 }
 

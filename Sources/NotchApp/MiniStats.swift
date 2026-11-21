@@ -127,7 +127,7 @@ enum MacPanelReader {
                     pid: Int32(parts[2]) ?? 0, memMB: memKB / 1024,
                     user: String(parts[3]), etime: String(parts[4])
                 ))
-                if tops.count == 4 { break }
+                if tops.count == 8 { break }
             }
             s.tops = tops
         }
@@ -329,6 +329,7 @@ func severityColor(fraction: Double) -> Color {
 struct StatsView: View {
     var sessions: SessionStore
     @ObservedObject private var settings = NotchSettings.shared
+    @ObservedObject private var history = HistoryStore.shared
     @State private var snap = MacPanelSnapshot()
     @State private var peakCpu: Double = 0
     @State private var peakAt = Date()
@@ -340,9 +341,16 @@ struct StatsView: View {
     @AppStorage("macFoldLoads") private var foldLoads = false
     @AppStorage("macFoldServers") private var foldServers = false
     @AppStorage("macFoldJunk") private var foldJunk = false
+    @AppStorage("macFoldDay") private var foldDay = false
     /// Proceso desplegado (detalle + terminar).
     @State private var expandedPid: Int32 = 0
     @StateObject private var junk = JunkStore()
+    /// Orden y búsqueda de la tabla de procesos.
+    @State private var sortByCpu = true
+    @State private var procQuery = ""
+    /// Sparklines de 90 s (una muestra por refresco ligero).
+    @State private var cpuHist: [Double] = []
+    @State private var memHist: [Double] = []
     private let light = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
     private let heavy = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
 
@@ -354,35 +362,31 @@ struct StatsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             measurementsCard
-            // Qué carga el Mac (plegable).
+            // Qué carga el Mac (plegable): tabla ordenable con buscador.
             sectionHeader(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total", folded: $foldLoads)
             if !foldLoads {
                 loadBar
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
-                ForEach(loadTops, id: \.name) { t in
-                    Button {
-                        expandedPid = expandedPid == t.pid ? 0 : t.pid
-                    } label: {
-                        HStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 2).fill(loadColor(t)).frame(width: 9, height: 9)
-                            Text(t.name).font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
-                            Spacer()
-                            Text(verbatim: "\(Int(t.pct.rounded()))%").font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(Color.white.opacity(0.3))
-                                .rotationEffect(.degrees(expandedPid == t.pid ? 90 : 0))
-                        }
-                        .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(expandedPid == t.pid ? Color.white.opacity(0.09) : Color.white.opacity(0.03))
+                HStack(spacing: 6) {
+                    Picker("", selection: $sortByCpu) {
+                        Text("CPU").tag(true)
+                        Text("MEM").tag(false)
+                    }
+                    .pickerStyle(.segmented).controlSize(.mini)
+                    .frame(maxWidth: 150)
+                    TextField(tr("mac.search"), text: $procQuery)
+                        .textFieldStyle(.roundedBorder).font(.caption)
+                }
+                if sortedProcs.isEmpty {
+                    Text(tr("mac.noMatch")).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ForEach(sortedProcs, id: \.pid) { t in
+                        ProcRow(
+                            t: t, color: procColor(t),
+                            value: sortByCpu ? "\(Int(t.pct.rounded()))%" : memMBString(t.memMB),
+                            expanded: expandedPid == t.pid,
+                            onToggle: { expandedPid = expandedPid == t.pid ? 0 : t.pid }
                         )
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(tr("mac.detail", t.name))
-                    .help(tr("mac.detail", t.name))
-                }
                 }
                 HStack(spacing: 6) {
                     RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.3)).frame(width: 9, height: 9)
@@ -391,7 +395,7 @@ struct StatsView: View {
                     Text(verbatim: "\(Int(loadRest.rounded()))%").font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
                 }
                 // Detalle del proceso desplegado: para entender y optimizar.
-                if let t = loadTops.first(where: { $0.pid == expandedPid }) {
+                if let t = snap.tops.first(where: { $0.pid == expandedPid }) {
                     HStack(spacing: 8) {
                         Text(verbatim: "PID \(t.pid) · \(Int(t.memMB.rounded())) MB · \(t.user) · \(t.etime)")
                             .font(.notchMono(10)).foregroundStyle(.secondary).lineLimit(1)
@@ -404,6 +408,11 @@ struct StatsView: View {
                     .padding(.horizontal, 8).padding(.vertical, 5)
                     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
                 }
+            }
+            // Actividad de agentes 24 h (del historial local).
+            sectionHeader(title: tr("mac.last24"), sub: "", folded: $foldDay)
+            if !foldDay {
+                DayChart(hours: history.last24h())
             }
             // Servidores de agentes (máx. 5 + resto, como Lumio).
             sectionHeader(
@@ -440,6 +449,7 @@ struct StatsView: View {
             let info = MacPanelReader.machineInfo()
             chip = "\(info.chip) · \(String(format: "%.0f", info.memGB)) GB"
             memGB = info.memGB; eCores = info.e; pCores = info.p
+            history.load()
             refreshLight()
             refreshHeavy()
             junk.scan()
@@ -467,6 +477,7 @@ struct StatsView: View {
                     LaneGauge(value: "\(Int((snap.cpuUser + snap.cpuSys).rounded()))%",
                               fraction: cpuFrac, color: severityColor(fraction: cpuFrac))
                     Text("CPU").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
+                    Sparkline(values: cpuHist, color: severityColor(fraction: cpuFrac))
                     Text("E \(eCores) · P \(pCores) · \(tr("mac.peak", Int(peakCpu.rounded())))")
                         .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
                 }
@@ -477,6 +488,7 @@ struct StatsView: View {
                     LaneGauge(value: "\(Int((memFrac * 100).rounded()))%",
                               fraction: memFrac, color: severityColor(fraction: memFrac))
                     Text("MEMORY").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
+                    Sparkline(values: memHist, color: severityColor(fraction: memFrac))
                     Text(String(format: "%.1f of %.0f GB", snap.memUsedGB, snap.memTotalGB))
                         .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
                     HStack(spacing: 4) {
@@ -634,16 +646,34 @@ struct StatsView: View {
         .frame(height: 8)
     }
 
-    private var loadTops: [ProcTop] { Array(snap.tops.prefix(3)) }
-
     private var loadRest: Double {
-        let sum = loadTops.reduce(0) { $0 + $1.pct }
+        let sum = snap.tops.prefix(3).reduce(0) { $0 + $1.pct }
         return max(0, totalCpu - sum)
     }
 
-    private func loadColor(_ t: ProcTop) -> Color {
-        let i = loadTops.firstIndex { $0.name == t.name } ?? 0
+    /// Tabla completa ordenable (CPU/MEM) con buscador.
+    private var sortedProcs: [ProcTop] {
+        let q = procQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let list = snap.tops.filter { q.isEmpty || $0.name.lowercased().contains(q) }
+        if sortByCpu { return list.sorted { $0.pct > $1.pct } }
+        return list.sorted { $0.memMB > $1.memMB }
+    }
+
+    private func procColor(_ t: ProcTop) -> Color {
+        let i = sortedProcs.firstIndex { $0.pid == t.pid } ?? 0
         return [Color(hex: "2F9E6E"), Color(hex: "2F9E6E").opacity(0.65), Color(hex: "2F9E6E").opacity(0.4)][i % 3]
+    }
+
+    private func verbatimPct(_ v: Double) -> Text {
+        Text(verbatim: "\(Int(v.rounded()))%")
+    }
+
+    private func memMBString(_ v: Double) -> String {
+        v >= 1024 ? String(format: "%.1f GB", v / 1024) : "\(Int(v.rounded())) MB"
+    }
+
+    private func verbatimMB(_ v: Double) -> Text {
+        Text(verbatim: memMBString(v))
     }
 
     /// Terminar con confirmación (solo PIDs de usuario, nunca sistema).
@@ -702,6 +732,10 @@ struct StatsView: View {
         } else {
             peakCpu = max(peakCpu, total)
         }
+        cpuHist.append(total)
+        memHist.append(snap.memTotalGB > 0 ? snap.memUsedGB / snap.memTotalGB * 100 : 0)
+        if cpuHist.count > 45 { cpuHist.removeFirst(cpuHist.count - 45) }
+        if memHist.count > 45 { memHist.removeFirst(memHist.count - 45) }
     }
 
     private func refreshHeavy() {
@@ -713,6 +747,112 @@ struct StatsView: View {
             MacPanelReader.readHeavy(into: &copy, agentPids: table)
             DispatchQueue.main.async { self.snap = copy }
         }
+    }
+}
+
+/// Barras de actividad por hora (últimas 24 h rodantes).
+struct DayChart: View {
+    var hours: [Int]
+    @ObservedObject private var settings = NotchSettings.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .bottom, spacing: 3) {
+                ForEach(hours.indices, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(settings.accent.opacity(hours[i] > 0 ? 0.85 : 0.18))
+                        .frame(maxWidth: .infinity, minHeight: 4, maxHeight: barH(hours[i]))
+                }
+            }
+            .frame(height: 44)
+            HStack {
+                ForEach([23, 18, 12, 6, 0], id: \.self) { back in
+                    Text(hourLabel(back)).font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.35))
+                    if back != 0 { Spacer() }
+                }
+            }
+        }
+    }
+
+    private func barH(_ v: Int) -> CGFloat {
+        let peak = max(CGFloat(hours.max() ?? 1), 1)
+        return max(4, 40 * CGFloat(v) / peak)
+    }
+
+    private func hourLabel(_ back: Int) -> String {
+        // back = horas hacia atrás desde ahora (0 = hora actual).
+        let d = Date().addingTimeInterval(-Double(back) * 3600)
+        let f = DateFormatter()
+        f.locale = .current
+        f.dateFormat = "H"
+        return f.string(from: d) + "h"
+    }
+}
+
+/// Fila de proceso del hub: botón expansible con valor configurable.
+struct ProcRow: View {
+    var t: ProcTop
+    var color: Color
+    var value: String
+    var expanded: Bool
+    var onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 9, height: 9)
+                Text(t.name).font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+                Spacer()
+                Text(verbatim: value).font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.3))
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            .padding(.horizontal, 6).padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(expanded ? Color.white.opacity(0.09) : Color.white.opacity(0.03))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tr("mac.detail", t.name))
+        .help(tr("mac.detail", t.name))
+    }
+}
+
+/// Minigráfica de 90 s (una muestra por refresco ligero).
+struct Sparkline: View {
+    var values: [Double]
+    var color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            if values.count > 1 {
+                let peak = max(values.max() ?? 1, 0.001)
+                let pts = values.enumerated().map { i, v in
+                    CGPoint(
+                        x: geo.size.width * CGFloat(i) / CGFloat(values.count - 1),
+                        y: geo.size.height - geo.size.height * CGFloat(v / peak)
+                    )
+                }
+                Path { p in
+                    p.move(to: CGPoint(x: pts[0].x, y: geo.size.height))
+                    p.addLines(pts)
+                    p.addLine(to: CGPoint(x: pts.last!.x, y: geo.size.height))
+                    p.closeSubpath()
+                }
+                .fill(color.opacity(0.12))
+                Path { p in
+                    p.move(to: pts[0])
+                    p.addLines(Array(pts.dropFirst()))
+                }
+                .stroke(color.opacity(0.85), lineWidth: 1.5)
+            }
+        }
+        .frame(height: 22)
+        .frame(maxWidth: 180)
+        .clipped()
     }
 }
 
