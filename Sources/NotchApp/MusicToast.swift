@@ -136,18 +136,19 @@ final class MusicToastState: ObservableObject {
     private var hideWork: DispatchWorkItem?
     private var gen = 0
 
-    /// Muestra el aviso 4.5 s (reinicia si ya estaba).
+    /// Muestra el aviso (reinicia si ya estaba).
     func announce() {
         gen += 1
         let g = gen
         hideWork?.cancel()
         visible = true
+        let secs = NotchSettings.shared.songToastSeconds
         let w = DispatchWorkItem { [weak self] in
             guard let self, self.gen == g else { return }
             withAnimation(.snappy(duration: 0.35)) { self.visible = false }
         }
         hideWork = w
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5, execute: w)
+        DispatchQueue.main.asyncAfter(deadline: .now() + secs, execute: w)
     }
 
     func hideNow() {

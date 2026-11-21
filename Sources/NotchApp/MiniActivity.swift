@@ -7,8 +7,10 @@ import SwiftUI
 // working/waiting con el siguiente evento del mismo agente. Sin permisos.
 
 extension HistoryStore {
-    /// Ventana en memoria y en disco: 90 días (antes 7).
-    static let retentionDays = 90
+    /// Ventana en memoria y en disco (días, configurable en Ajustes).
+    static var retentionDays: Double {
+        UserDefaults.standard.object(forKey: "notchHistoryDays") as? Double ?? 90
+    }
     /// Estados que cuentan como tiempo activo (como SessionStore.active).
     private static let activeStatuses: Set<String> = ["working", "waiting"]
     /// Mínimo diario para que el día cuente en la racha.
@@ -52,7 +54,7 @@ extension HistoryStore {
     /// Racha actual: días seguidos con actividad (si hoy aún no llega al
     /// mínimo, se cuenta desde ayer para no romperla a primera hora).
     func currentStreak(now: Date = Date()) -> Int {
-        let days = secondsPerDay(last: Self.retentionDays, now: now)
+        let days = secondsPerDay(last: Int(Self.retentionDays), now: now)
         var start = 0
         if !days.isEmpty, days[0].seconds < Self.streakMinimum { start = 1 }
         var streak = 0
@@ -65,7 +67,7 @@ extension HistoryStore {
 
     /// Mejor racha en la ventana guardada.
     func bestStreak(now: Date = Date()) -> Int {
-        let days = secondsPerDay(last: Self.retentionDays, now: now).reversed()
+        let days = secondsPerDay(last: Int(Self.retentionDays), now: now).reversed()
         var best = 0, run = 0
         for d in days {
             if d.seconds >= Self.streakMinimum { run += 1; best = max(best, run) }

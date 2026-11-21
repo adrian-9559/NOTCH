@@ -44,6 +44,22 @@ final class NotchSettings: ObservableObject {
     @Published var langCode: String {
         didSet { save() }
     }
+    /// Duración del aviso de canción (s).
+    @Published var songToastSeconds: Double {
+        didSet { save() }
+    }
+    /// Duración del aviso de agente (s).
+    @Published var agentToastSeconds: Double {
+        didSet { save() }
+    }
+    /// Días de historial guardado.
+    @Published var historyDays: Double {
+        didSet { save() }
+    }
+    /// Fuente de música: auto, Music o Spotify.
+    @Published var musicSource: String {
+        didSet { save() }
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -69,6 +85,11 @@ final class NotchSettings: ObservableObject {
         agentToastEnabled = d.object(forKey: "notchAgentToast") as? Bool ?? true
         autoSendTasks = d.object(forKey: "notchAutoSendTasks") as? Bool ?? false
         langCode = d.string(forKey: "notchLang") ?? NotchLang.system().rawValue
+        songToastSeconds = d.object(forKey: "notchSongToastSecs") as? Double ?? 4.5
+        agentToastSeconds = d.object(forKey: "notchAgentToastSecs") as? Double ?? 5.0
+        historyDays = d.object(forKey: "notchHistoryDays") as? Double ?? 90
+        let ms = d.string(forKey: "notchMusicSource") ?? "auto"
+        musicSource = ["auto", "Music", "Spotify"].contains(ms) ? ms : "auto"
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
     }
@@ -108,6 +129,10 @@ final class NotchSettings: ObservableObject {
         d.set(agentToastEnabled, forKey: "notchAgentToast")
         d.set(autoSendTasks, forKey: "notchAutoSendTasks")
         d.set(langCode, forKey: "notchLang")
+        d.set(songToastSeconds, forKey: "notchSongToastSecs")
+        d.set(agentToastSeconds, forKey: "notchAgentToastSecs")
+        d.set(historyDays, forKey: "notchHistoryDays")
+        d.set(musicSource, forKey: "notchMusicSource")
     }
 }
 #endif

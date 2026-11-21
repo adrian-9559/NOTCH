@@ -48,6 +48,8 @@ struct SettingsModalView: View {
     @State private var autoSend = ReplyService.shared.autoSendEnabled
     @State private var trustState = ReplyService.shared.isTrusted
     @State private var vaultPath: String = UserDefaults.standard.string(forKey: "notchObsidianVault") ?? ""
+    @State private var launchLogin = false
+    @State private var storageSize = "—"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,6 +61,8 @@ struct SettingsModalView: View {
                     languageSection
                     navbarSection
                     behaviorSection
+                    musicSection
+                    dataSection
                     privacySection
                 }
                 .padding(18)
@@ -66,6 +70,7 @@ struct SettingsModalView: View {
         }
         .frame(width: 460, height: 560)
         .background(SettingsCardBackground())
+        .onAppear { launchLogin = LaunchAtLogin.isEnabled() }
     }
 
     // MARK: - Cabecera
@@ -229,6 +234,15 @@ struct SettingsModalView: View {
                     UserDefaults.standard.set(hoverOpen, forKey: "notchHoverOpen")
                 }
                 SettingsToggleRow(
+                    label: tr("set.login"),
+                    subtitle: tr("set.loginSub"),
+                    isOn: $launchLogin,
+                    accent: settings.accent
+                ) {
+                    LaunchAtLogin.set(launchLogin)
+                    launchLogin = LaunchAtLogin.isEnabled()
+                }
+                SettingsToggleRow(
                     label: tr("set.autosend"),
                     subtitle: tr("set.autosendSub"),
                     isOn: $autoSend,
@@ -261,6 +275,22 @@ struct SettingsModalView: View {
                     isOn: $settings.autoSendTasks,
                     accent: settings.accent
                 ) {}
+                HStack {
+                    Text(tr("set.durSong"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                    Spacer()
+                    Stepper("\(Int(settings.songToastSeconds))s", value: $settings.songToastSeconds, in: 2...10, step: 1)
+                        .font(.caption).controlSize(.mini)
+                }
+                HStack {
+                    Text(tr("set.durAgent"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                    Spacer()
+                    Stepper("\(Int(settings.agentToastSeconds))s", value: $settings.agentToastSeconds, in: 2...10, step: 1)
+                        .font(.caption).controlSize(.mini)
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(tr("set.vault"))
                         .font(.notchMono(10))
@@ -272,6 +302,80 @@ struct SettingsModalView: View {
                 }
                 .padding(.top, 4)
             }
+        }
+    }
+
+    // MARK: - Música
+
+    private var musicSection: some View {
+        SettingsSection(title: tr("set.music"), icon: "music.note") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(tr("set.source"))
+                    .font(.notchMono(10))
+                    .foregroundStyle(Color.white.opacity(0.6))
+                Picker("", selection: $settings.musicSource) {
+                    Text(tr("focus.auto")).tag("auto")
+                    Text("Music").tag("Music")
+                    Text("Spotify").tag("Spotify")
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    // MARK: - Datos
+
+    private var dataSection: some View {
+        SettingsSection(title: tr("set.data"), icon: "externaldrive") {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(tr("set.retention"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                    Spacer()
+                    Stepper(tr("set.days", Int(settings.historyDays)), value: $settings.historyDays, in: 7...365, step: 7)
+                        .font(.caption).controlSize(.mini)
+                }
+                HStack {
+                    Text(tr("set.storage"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                    Spacer()
+                    Text(storageSize)
+                        .font(.notchMono(11))
+                        .foregroundStyle(Color.white.opacity(0.6))
+                        .monospacedDigit()
+                    Button(tr("set.clear")) { confirmClearData() }
+                        .controlSize(.mini).buttonStyle(.bordered)
+                }
+            }
+        }
+        .onAppear { refreshStorageSize() }
+    }
+
+    private func refreshStorageSize() {
+        DispatchQueue.global(qos: .utility).async {
+            let dir = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support/NOTCH").path
+            let kb = JunkStore.duKB([dir])
+            let s = kb >= 1_048_576
+                ? String(format: "%.1f GB", Double(kb) / 1_048_576)
+                : String(format: "%.1f MB", Double(kb) / 1024)
+            DispatchQueue.main.async { storageSize = s }
+        }
+    }
+
+    private func confirmClearData() {
+        let a = NSAlert()
+        a.messageText = tr("set.clearTitle")
+        a.informativeText = tr("set.clearBody")
+        a.addButton(withTitle: tr("set.clearOk"))
+        a.addButton(withTitle: tr("mac.cancel"))
+        if a.runModal() == .alertFirstButtonReturn {
+            HistoryStore.shared.reset()
+            NotchContext.shared.tasks.clearAll()
+            refreshStorageSize()
         }
     }
 

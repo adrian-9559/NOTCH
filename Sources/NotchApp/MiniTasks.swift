@@ -105,6 +105,12 @@ final class TaskStore: ObservableObject {
         save()
     }
 
+    /// Vacía todo (Ajustes → Borrar datos).
+    func clearAll() {
+        tasks = []
+        save()
+    }
+
     /// Reordena dentro de una lista filtrada (mapea a índices globales).
     /// Los no filtrados conservan su sitio; los filtrados toman el nuevo orden.
     func move(in filtered: [AgentTask], from source: IndexSet, to dest: Int) {

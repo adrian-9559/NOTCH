@@ -94,7 +94,7 @@ final class AgentToastState: ObservableObject {
     private var hideWork: DispatchWorkItem?
     private var gen = 0
 
-    /// Muestra el aviso 5 s (reinicia si ya había uno).
+    /// Muestra el aviso (reinicia si ya había uno).
     func announce(title: String, subtitle: String, colorHex: String?) {
         gen += 1
         let g = gen
@@ -103,12 +103,13 @@ final class AgentToastState: ObservableObject {
         self.subtitle = subtitle
         self.colorHex = colorHex
         visible = true
+        let secs = NotchSettings.shared.agentToastSeconds
         let w = DispatchWorkItem { [weak self] in
             guard let self, self.gen == g else { return }
             withAnimation(.snappy(duration: 0.35)) { self.visible = false }
         }
         hideWork = w
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: w)
+        DispatchQueue.main.asyncAfter(deadline: .now() + secs, execute: w)
     }
 
     func hideNow() {

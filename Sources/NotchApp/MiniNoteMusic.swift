@@ -148,13 +148,17 @@ final class MusicStore: ObservableObject {
     func poll() {
         guard !busy else { return }
         busy = true
+        let want = NotchSettings.shared.musicSource
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             let musicApp = Self.isRunning("Music")
             let spotifyApp = Self.isRunning("Spotify")
             var hit: (t: String, a: String, p: Double, d: Double, playing: Bool, app: String)?
-            if musicApp, let r = self.query(app: "Music") { hit = (r.0, r.1, r.2, r.3, r.4, "Music") }
-            else if spotifyApp, let r = self.query(app: "Spotify") { hit = (r.0, r.1, r.2, r.3, r.4, "Spotify") }
+            if (want == "auto" || want == "Music"), musicApp, let r = self.query(app: "Music") {
+                hit = (r.0, r.1, r.2, r.3, r.4, "Music")
+            } else if (want == "auto" || want == "Spotify"), spotifyApp, let r = self.query(app: "Spotify") {
+                hit = (r.0, r.1, r.2, r.3, r.4, "Spotify")
+            }
             DispatchQueue.main.async {
                 self.busy = false
                 self.playerLive = musicApp || spotifyApp
