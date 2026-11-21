@@ -161,6 +161,10 @@ enum MacPanelReader {
     /// Salud, ciclos, potencia, tiempo restante y estado de la batería.
     /// Si macOS no da tiempo (0 al estar casi llena), se estima con la
     /// capacidad restante y la potencia actual.
+    /// La salud sale de system_profiler (lo mismo que enseña Ajustes);
+    /// se cachea 15 min porque es lento y casi no cambia.
+    private static var cachedHealth: (value: Double, at: Date)?
+
     static func readBattery() -> BatteryDetails {
         var b = BatteryDetails()
         guard let out = run("/usr/sbin/ioreg", ["-rn", "AppleSmartBattery"]) else { return b }
@@ -174,6 +178,16 @@ enum MacPanelReader {
             b.healthPct = full / design * 100
         } else {
             b.healthPct = 0 // sin dato: se muestra "—"
+        }
+        // system_profiler manda: es el % que enseña Ajustes del sistema.
+        // (Ojo: usa NBSP antes del %, que \s no traga.)
+        if let cached = cachedHealth, Date().timeIntervalSince(cached.at) < 900 {
+            b.healthPct = cached.value
+        } else if let profiler = run("/usr/sbin/system_profiler", ["SPPowerDataType"]),
+                  let r = profiler.range(of: "Maximum Capacity:[^0-9]*([0-9]+)", options: .regularExpression),
+                  let v = Double(profiler[r].replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)) {
+            b.healthPct = v
+            cachedHealth = (v, Date())
         }
         let remaining = num1(#""RemainingCapacity"=(\d+)"#) ?? 0
         b.cycles = Int(num1(#""CycleCount" = (\d+)"#) ?? 0)
