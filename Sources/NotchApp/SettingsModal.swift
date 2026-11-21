@@ -408,8 +408,11 @@ struct SettingsModalView: View {
                     Divider().background(Color.white.opacity(0.07))
                     IconToggleRow(icon: "person.fill.checkmark", label: tr("set.agentToast"), subtitle: tr("set.agentToastSub"), isOn: $settings.agentToastEnabled, accent: settings.accent) {}
                     Divider().background(Color.white.opacity(0.07))
+                    IconToggleRow(icon: "hand.raised.fill", label: tr("set.waitToast"), subtitle: tr("set.waitToastSub"), isOn: $settings.waitToastEnabled, accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
                     DurationRow(label: tr("set.durSong"), value: $settings.songToastSeconds, accent: settings.accent)
                     DurationRow(label: tr("set.durAgent"), value: $settings.agentToastSeconds, accent: settings.accent)
+                    DurationRow(label: tr("set.durWait"), value: $settings.waitToastSeconds, range: 3...15, accent: settings.accent)
                 }
             }
             SettingsCard(label: tr("set.vault"), icon: "folder.fill", accent: settings.accent) {

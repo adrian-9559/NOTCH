@@ -76,7 +76,8 @@ struct AgentToastView: View {
 }
 
 /// Hex casi negro (p. ej. OpenCode #000000): necesita círculo claro.
-private func isDarkHex(_ hex: String?) -> Bool {
+/// Compartida con WaitingToast (misma píldora, otro icono).
+func isDarkHex(_ hex: String?) -> Bool {
     guard var h = hex else { return false }
     if h.hasPrefix("#") { h.removeFirst() }
     guard h.count == 6, let v = UInt64(h, radix: 16) else { return false }

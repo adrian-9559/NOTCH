@@ -10,7 +10,7 @@ final class NotchSettings: ObservableObject {
     static let defaultAccent = "A550A7"
     /// IDs de pestaña que la navbar puede mostrar (orden por defecto).
     /// Son IDs estables: el título visible sale de `NotchTab` (idioma).
-    static let tabTitles = ["shelf", "focus", "mac", "activity", "music", "notes", "tasks"]
+    static let tabTitles = ["shelf", "focus", "mac", "activity", "agents", "music", "notes", "tasks"]
 
     /// Color de acento en hex (#RRGGBB).
     @Published var accentHex: String {
@@ -36,6 +36,10 @@ final class NotchSettings: ObservableObject {
     @Published var agentToastEnabled: Bool {
         didSet { save() }
     }
+    /// Píldora clicable al necesitarte un agente (abre el panel).
+    @Published var waitToastEnabled: Bool {
+        didSet { save() }
+    }
     /// Auto-enviar tareas nuevas al crearlas (si no, botón Enviar).
     @Published var autoSendTasks: Bool {
         didSet { save() }
@@ -50,6 +54,10 @@ final class NotchSettings: ObservableObject {
     }
     /// Duración del aviso de agente (s).
     @Published var agentToastSeconds: Double {
+        didSet { save() }
+    }
+    /// Duración del aviso de espera (s): la pregunta tarda en leerse.
+    @Published var waitToastSeconds: Double {
         didSet { save() }
     }
     /// Días de historial guardado.
@@ -83,10 +91,12 @@ final class NotchSettings: ObservableObject {
             .filter { Self.tabTitles.contains($0) }
         songToastEnabled = d.object(forKey: "notchSongToast") as? Bool ?? true
         agentToastEnabled = d.object(forKey: "notchAgentToast") as? Bool ?? true
+        waitToastEnabled = d.object(forKey: "notchWaitToast") as? Bool ?? true
         autoSendTasks = d.object(forKey: "notchAutoSendTasks") as? Bool ?? false
         langCode = d.string(forKey: "notchLang") ?? NotchLang.system().rawValue
         songToastSeconds = d.object(forKey: "notchSongToastSecs") as? Double ?? 4.5
         agentToastSeconds = d.object(forKey: "notchAgentToastSecs") as? Double ?? 5.0
+        waitToastSeconds = d.object(forKey: "notchWaitToastSecs") as? Double ?? 8.0
         historyDays = d.object(forKey: "notchHistoryDays") as? Double ?? 90
         let ms = d.string(forKey: "notchMusicSource") ?? "auto"
         musicSource = ["auto", "Music", "Spotify"].contains(ms) ? ms : "auto"
@@ -127,10 +137,12 @@ final class NotchSettings: ObservableObject {
         d.set(hiddenTabs, forKey: "notchHiddenTabs")
         d.set(songToastEnabled, forKey: "notchSongToast")
         d.set(agentToastEnabled, forKey: "notchAgentToast")
+        d.set(waitToastEnabled, forKey: "notchWaitToast")
         d.set(autoSendTasks, forKey: "notchAutoSendTasks")
         d.set(langCode, forKey: "notchLang")
         d.set(songToastSeconds, forKey: "notchSongToastSecs")
         d.set(agentToastSeconds, forKey: "notchAgentToastSecs")
+        d.set(waitToastSeconds, forKey: "notchWaitToastSecs")
         d.set(historyDays, forKey: "notchHistoryDays")
         d.set(musicSource, forKey: "notchMusicSource")
     }

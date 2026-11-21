@@ -67,13 +67,73 @@ public extension AgentDetector {
     }
 
     /// Heurística "needs your yes": busca approval/permission en logs recientes.
+    /// Devuelve la LÍNEA de la pregunta (no la ruta) para mostrarla tal cual.
     private func checkWaitingNeedle(in files: [SessionFile]) -> String? {
         let needles = ["approval", "permission", "waiting", "needs your", "allow?", "confirm", "yes/no", "[y/n]"]
-        for f in files.prefix(6) where f.mtime.timeIntervalSinceNow > -300 {
-            guard let s = try? String(contentsOfFile: f.path, encoding: .utf8).lowercased().suffix(4000) else { continue }
-            if needles.contains(where: { s.contains($0) }) { return "waiting: \(f.path)" }
+        // Lo más nuevo primero EN GLOBAL (las rutas van en orden fijo y
+        // la evidencia reciente podría quedar fuera del prefix).
+        for f in files.sorted(by: { $0.mtime > $1.mtime }).prefix(6)
+            where f.mtime.timeIntervalSinceNow > -300 {
+            guard let full = try? String(contentsOfFile: f.path, encoding: .utf8) else { continue }
+            let raw = String(full.suffix(8000)) // la pregunta está al final
+            guard let r = needles.compactMap({ raw.range(of: $0, options: .caseInsensitive) })
+                .min(by: { $0.lowerBound < $1.lowerBound }) else { continue }
+            return Self.questionLine(around: r.lowerBound, in: raw) ?? "waiting: \(f.path)"
         }
         return nil
+    }
+
+    /// Extrae la línea que contiene la pregunta (caso original), limpia de
+    /// ANSI y capada. nil si es binario (sqlite) o vacía → fallback a ruta.
+    static func questionLine(around idx: String.Index, in raw: String) -> String? {
+        let lineStart = raw[..<idx].lastIndex(of: "\n").map { raw.index(after: $0) } ?? raw.startIndex
+        let lineEnd = raw[idx...].firstIndex(of: "\n") ?? raw.endIndex
+        let candidate = String(raw[lineStart..<lineEnd])
+        // Binario (sqlite): exige mayoría imprimible sobre el original.
+        let printable = candidate.unicodeScalars.filter { ($0.isASCII && $0.value >= 32) || $0.value == 9 }.count
+        guard !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !candidate.contains("\0"), // binario (sqlite) siempre los trae
+              Double(printable) / Double(max(1, candidate.count)) > 0.7 else { return nil }
+        // Pela controles/ANSI para pintar limpio en la píldora.
+        var line = candidate
+            .replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression)
+            .filter { $0.isASCII && ($0 >= " " || $0 == "\t") }
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return nil }
+        if line.count > 160 { line = String(line.prefix(160)) + "…" }
+        return line
+    }
+}
+
+// MARK: - Juez de episodios (anti-spam de avisos)
+
+// Decisiones puras para los avisos de agente: solo al completar episodios
+// de verdad (no por parpadeos del detector ni subagentes que van y vienen).
+public enum EpisodeJudge {
+    /// Trabajo mínimo para que un done avise (igual que antes).
+    public static let doneMinWorked: TimeInterval = 20
+    /// El done debe mantenerse este tiempo (antes 10 s: los subagentes
+    /// largos dejaban el proceso quieto y disparaban avisos falsos).
+    public static let donePersistence: TimeInterval = 45
+    /// La pregunta debe seguir ahí este tiempo (evita parpadeos).
+    public static let waitPersistence: TimeInterval = 5
+
+    /// ¿Arranca el reloj de done? Solo working/waiting → done con curro.
+    public static func shouldStartDoneClock(prev: AgentStatus?, current: AgentStatus, worked: TimeInterval) -> Bool {
+        guard current == .done, prev == .working || prev == .waiting else { return false }
+        return worked >= doneMinWorked
+    }
+
+    /// ¿Avisa el done? Solo si sigue en done y no es el mismo request
+    /// ya avisado (sin quietud/idle/crash de por medio).
+    public static func shouldToastDone(stillDone: Bool, sameRequestNotified: Bool) -> Bool {
+        stillDone && !sameRequestNotified
+    }
+
+    /// ¿Arranca el reloj de espera? Solo al ENTRAR en waiting (una vez
+    /// por episodio: waiting → waiting no re-dispara).
+    public static func shouldStartWaitClock(prev: AgentStatus?, current: AgentStatus) -> Bool {
+        current == .waiting && prev != .waiting
     }
 }
 

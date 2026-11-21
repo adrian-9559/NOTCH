@@ -30,8 +30,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var workingSince: [AgentID: Date] = [:]
     /// Generación por agente: un aviso viejo no pisa a uno nuevo.
     private var doneGen: [AgentID: Int] = [:]
+    /// Generación de espera: la pregunta solo avisa una vez por episodio.
+    private var waitGen: [AgentID: Int] = [:]
+    /// Cuándo se avisó el último done: si vuelve a trabajar sin quietud
+    /// de por medio es el MISMO request (subagente) → no re-avisar.
+    private var lastDoneToast: [AgentID: Date] = [:]
+    /// Hubo quietud (idle/crash/desapareció) desde el último done.
+    private var quietSinceToast: [AgentID: Bool] = [:]
     /// Cola del aviso de agente: sale cuando ningún otro aviso está fuera.
     private var toastQueueGen = 0
+    /// Cola del aviso de espera: igual, con su generación.
+    private var waitQueueGen = 0
+    private var waitToast = WaitingToastController()
     private var cancellables = Set<AnyCancellable>()
     private var hover = NotchHoverController()
     /// Poll del bocadillo de navbar (las tracking areas no llegan aquí).
@@ -55,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotchContext.shared.store = store
         store.onChange = { [weak self] fresh in
             HistoryStore.shared.record(fresh)
+            self?.announceWaiting(fresh)
             self?.announceFinished(fresh)
         }
         AppFonts.register()
@@ -116,14 +127,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showPanel() {
         toast.hide()
         agentToast.hide()
+        waitToast.hide()
         lights.setPanelOpen(true)
         windowController?.show(anchorX: notchAnchorX, topY: notchTopY)
     }
 
     /// Avisa con píldora (como la de música) cuando un agente termina
-    /// DE VERDAD: solo si trabajó un rato (≥20 s) y el done se mantiene
-    /// 10 s. Así no salta por cada subtarea de una misma petición.
+    /// DE VERDAD. Endurecido contra subagentes: el done debe durar 45 s
+    /// y, si ya se avisó sin quietud de por medio (mismo request),
+    /// se suprime en vez de spamear.
     private func announceFinished(_ fresh: [AgentSession]) {
+        let present = Set(fresh.map(\.agent))
+        // Quietud o desaparición = fin del request: el próximo done avisa.
+        for a in lastAgentStatus.keys where !present.contains(a) {
+            quietSinceToast[a] = true
+            lastAgentStatus.removeValue(forKey: a)
+        }
         for s in fresh {
             let prev = lastAgentStatus[s.agent]
             lastAgentStatus[s.agent] = s.status
@@ -133,17 +152,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 continue
             }
-            guard s.status == .done,
-                  prev == .working || prev == .waiting else { continue }
+            if s.status == .idle || s.status == .crashed {
+                quietSinceToast[s.agent] = true
+                continue
+            }
             let worked = Date().timeIntervalSince(workingSince[s.agent] ?? Date())
-            guard worked >= 20 else { continue }
+            guard EpisodeJudge.shouldStartDoneClock(prev: prev, current: s.status, worked: worked) else { continue }
+            if lastDoneToast[s.agent] != nil, quietSinceToast[s.agent] != true {
+                fputs("NOTCH-EPISODE agent=\(s.agent.rawValue) done-suppressed (mismo request)\n", stderr)
+                continue
+            }
             doneGen[s.agent, default: 0] += 1
             let gen = doneGen[s.agent]!
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + EpisodeJudge.donePersistence) { [weak self] in
                 guard let self,
                       self.doneGen[s.agent] == gen,
                       self.lastAgentStatus[s.agent] == .done else { return }
+                self.lastDoneToast[s.agent] = Date()
+                self.quietSinceToast[s.agent] = false
+                fputs("NOTCH-EPISODE agent=\(s.agent.rawValue) done-toast\n", stderr)
                 self.requestAgentToast(s)
+            }
+        }
+    }
+
+    /// Avisa con píldora clicable cuando un agente PREGUNTA algo: una vez
+    /// por episodio (entrar en waiting), si la pregunta persiste 5 s.
+    private func announceWaiting(_ fresh: [AgentSession]) {
+        for s in fresh where EpisodeJudge.shouldStartWaitClock(prev: lastAgentStatus[s.agent], current: s.status) {
+            waitGen[s.agent, default: 0] += 1
+            let gen = waitGen[s.agent]!
+            DispatchQueue.main.asyncAfter(deadline: .now() + EpisodeJudge.waitPersistence) { [weak self] in
+                guard let self,
+                      self.waitGen[s.agent] == gen,
+                      self.lastAgentStatus[s.agent] == .waiting else { return }
+                fputs("NOTCH-EPISODE agent=\(s.agent.rawValue) wait-toast\n", stderr)
+                self.requestWaitToast(s)
             }
         }
     }
@@ -157,13 +201,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pumpAgentToast(_ s: AgentSession, gen: Int, attempt: Int) {
         guard gen == toastQueueGen, attempt < 12 else { return }
-        if toast.state.visible || agentToast.state.visible {
+        if toast.state.visible || agentToast.state.visible || waitToast.state.visible {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 self?.pumpAgentToast(s, gen: gen, attempt: attempt + 1)
             }
             return
         }
         agentToast.show(session: s)
+    }
+
+    /// Cola del aviso de espera: igual que la de fin, con su generación.
+    private func requestWaitToast(_ s: AgentSession) {
+        waitQueueGen += 1
+        pumpWaitToast(s, gen: waitQueueGen, attempt: 0)
+    }
+
+    private func pumpWaitToast(_ s: AgentSession, gen: Int, attempt: Int) {
+        guard gen == waitQueueGen, attempt < 12 else { return }
+        if toast.state.visible || agentToast.state.visible || waitToast.state.visible {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                self?.pumpWaitToast(s, gen: gen, attempt: attempt + 1)
+            }
+            return
+        }
+        waitToast.show(session: s)
     }
 
     private func hidePanel() {
@@ -230,13 +291,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toast.rebuild(notches: notches)
         agentToast.isPanelVisible = { [weak self] in self?.windowController?.isVisible == true }
         agentToast.rebuild(notches: notches)
+        // La espera entra en la misma cola; al pulsarla se abre el panel
+        // en el apartado Agentes, con la pregunta expandida.
+        waitToast.isPanelVisible = { [weak self] in self?.windowController?.isVisible == true }
+        waitToast.rebuild(notches: notches)
+        waitToast.onTap = { [weak self] in
+            self?.waitToast.hide()
+            self?.hover.disarm()
+            self?.showPanel()
+            NotificationCenter.default.post(name: .notchShowAgents, object: nil)
+        }
         // Mientras sale el aviso de canción, la píldora se quita y vuelve al irse.
         toast.state.$visible
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.lights.setToastShowing($0) }
             .store(in: &cancellables)
-        // La música espera si el aviso de agente está fuera (y viceversa).
-        toast.isBlocked = { [weak self] in self?.agentToast.state.visible == true }
+        // La música espera si el aviso de agente o la espera están fuera (y viceversa).
+        toast.isBlocked = { [weak self] in
+            self?.agentToast.state.visible == true || self?.waitToast.state.visible == true
+        }
     }
 
     // MARK: - Hover: abrir al subir el ratón, cerrar al sacarlo

@@ -113,19 +113,8 @@ struct NotchRootView: View {
                 .padding(.bottom, -10)
             }
             VStack(spacing: 0) {
-                if !store.waiting.isEmpty {
-                    // Avisos con scroll: si hay muchos, todos se ven.
-                    ScrollView {
-                        VStack(spacing: 8) {
-                            ForEach(store.waiting, id: \.agent) { s in
-                                WaitingCard(session: s, onAllow: onAllow, onReply: onReply, onOpen: onOpen)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 150)
-                    .padding(.top, 14)
-                    .padding([.leading, .trailing], 14)
-                }
+                // Las respuestas viven en el apartado Agentes (WaitingCard
+                // se mudó allí): sin tira superior.
                 if !tabs.isEmpty {
                     // Como Lumio: fila de botones arriba, separador fino,
                     // contenido debajo.
@@ -237,6 +226,12 @@ struct NotchRootView: View {
         }
         .coordinateSpace(name: "notchPanel")
         .onPreferenceChange(NavFramesKey.self) { NotchContext.shared.navHover.frames = $0 }
+        // La píldora "te necesita" abre el panel directamente en Agentes.
+        .onReceive(NotificationCenter.default.publisher(for: .notchShowAgents)) { _ in
+            withAnimation(.snappy(duration: 0.22)) {
+                selectedTitle = NotchTab.agents.rawValue
+            }
+        }
         // Como Lumio: vidrio oscuro siempre, de día y de noche.
         .environment(\.colorScheme, .dark)
     }
@@ -294,62 +289,6 @@ struct NotchRootView: View {
         }
         .animation(.easeInOut(duration: 1.1), value: music.tint)
         .shadow(radius: 24)
-    }
-}
-
-private struct WaitingCard: View {
-    var session: AgentSession
-    var onAllow: (AgentSession) -> Void
-    var onReply: (AgentSession, String) -> Void
-    var onOpen: (AgentSession) -> Void
-    @ObservedObject private var settings = NotchSettings.shared
-    @State private var replyText = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Circle().fill(Color(hex: session.agent.notchColorHex)).frame(width: 8, height: 8)
-                Text("\(session.agent.displayName) \(tr("waiting.needs"))")
-                    .font(.notchMono(12))
-                    .foregroundStyle(.white)
-                Spacer()
-                Text(tr("waiting.tag"))
-                    .font(.notchMono(10))
-                    .foregroundStyle(settings.accent)
-            }
-            Text(session.detail ?? session.status.rawValue)
-                .font(.notchMono(10))
-                .foregroundStyle(Color.white.opacity(0.6))
-                .lineLimit(2)
-            HStack(spacing: 6) {
-                Button(tr("waiting.allow")) { onAllow(session) }
-                    .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
-                TextField(tr("waiting.replyPh"), text: $replyText, onCommit: {
-                    onReply(session, replyText); replyText = ""
-                })
-                .textFieldStyle(.roundedBorder)
-                .font(.notchMono(11))
-                Button(tr("waiting.send")) { onReply(session, replyText); replyText = "" }
-                    .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
-                    .disabled(replyText.isEmpty)
-                Button(tr("waiting.open")) { onOpen(session) }
-                    .buttonStyle(NotchGhostButton(size: .small))
-            }
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.black.opacity(0.5))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(settings.accent.opacity(0.45), lineWidth: 1)
-        )
-        .onReceive(NotificationCenter.default.publisher(for: .notchPrefillReply)) { note in
-            if let path = note.object as? String {
-                replyText = path
-            }
-        }
     }
 }
 

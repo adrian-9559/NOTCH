@@ -25,7 +25,7 @@ enum NotchLang: String, CaseIterable {
 
 /// IDs estables de pestaña (lo que se guarda en Ajustes).
 enum NotchTab: String, CaseIterable {
-    case shelf, focus, mac, activity, music, notes, tasks
+    case shelf, focus, mac, activity, agents, music, notes, tasks
 
     /// Título visible según el idioma.
     var title: String { tr("tab.\(rawValue)") }
@@ -36,6 +36,7 @@ enum NotchTab: String, CaseIterable {
         case .focus: return "timer"
         case .mac: return "cpu"
         case .activity: return "chart.bar"
+        case .agents: return "sparkles"
         case .music: return "music.note"
         case .notes: return "note.text"
         case .tasks: return "checklist"
@@ -65,7 +66,7 @@ enum NotchStrings {
     static let table: [String: [String: String]] = [
         "es": [
             "tab.shelf": "Shelf", "tab.focus": "Focus", "tab.mac": "Mac",
-            "tab.activity": "Actividad", "tab.music": "Música", "tab.notes": "Notas",
+            "tab.activity": "Actividad", "tab.agents": "Agentes", "tab.music": "Música", "tab.notes": "Notas",
             "tab.tasks": "Tareas",
             "nav.active": "activos", "nav.idle": "sin agentes",
             "waiting.needs": "te necesita", "waiting.tag": "espera",
@@ -157,12 +158,15 @@ enum NotchStrings {
             "set.songToastSub": "Píldora con carátula al sonar otra",
             "set.agentToast": "Aviso al terminar un agente",
             "set.agentToastSub": "Píldora cuando acaba de verdad",
+            "set.waitToast": "Aviso al necesitarte",
+            "set.waitToastSub": "Píldora clicable: abre el notch para responder",
             "set.taskAuto": "Auto-enviar tareas nuevas",
             "set.taskAutoSub": "Las manda al crearlas (si no, botón Enviar)",
             "set.login": "Abrir al iniciar sesión",
             "set.loginSub": "NOTCH arranca contigo",
             "set.durSong": "Duración aviso canción",
             "set.durAgent": "Duración aviso agente",
+            "set.durWait": "Duración aviso espera",
             "set.music": "música", "set.source": "Fuente",
             "set.data": "datos", "set.retention": "Días de historial",
             "set.days": "%d días", "set.storage": "En disco",
@@ -176,6 +180,11 @@ enum NotchStrings {
             "set.local": "NOTCH · 100% local",
             "set.language": "idioma", "set.languageSub": "Idioma de NOTCH (pestañas aparte)",
             "toast.done": "%@ ha terminado", "toast.taskDone": "tarea completada",
+            "toast.needsYou": "%@ te necesita",
+            "agents.title": "Agentes en vivo", "agents.live": "%d activos",
+            "agents.need": "NECESITAN RESPUESTA", "agents.working": "TRABAJANDO",
+            "agents.recent": "RECIENTES", "agents.empty": "Sin agentes activos",
+            "agents.emptySub": "Aparecen aquí mientras trabajan.",
             "task.title": "Tareas", "task.new": "Nueva tarea",
             "task.titlePh": "Qué hay que hacer…", "task.detailPh": "Detalle (opcional)",
             "task.anyone": "Cualquiera", "task.add": "Añadir",
@@ -198,7 +207,7 @@ enum NotchStrings {
         ],
         "en": [
             "tab.shelf": "Shelf", "tab.focus": "Focus", "tab.mac": "Mac",
-            "tab.activity": "Activity", "tab.music": "Music", "tab.notes": "Notes",
+            "tab.activity": "Activity", "tab.agents": "Agents", "tab.music": "Music", "tab.notes": "Notes",
             "tab.tasks": "Tasks",
             "nav.active": "active", "nav.idle": "no agents",
             "waiting.needs": "needs you", "waiting.tag": "waiting",
@@ -290,12 +299,15 @@ enum NotchStrings {
             "set.songToastSub": "Pill with artwork on new song",
             "set.agentToast": "Agent-done notice",
             "set.agentToastSub": "Pill when it really finishes",
+            "set.waitToast": "Notice when it needs you",
+            "set.waitToastSub": "Tappable pill: opens the notch to reply",
             "set.taskAuto": "Auto-send new tasks",
             "set.taskAutoSub": "Sends them on create (else Send button)",
             "set.login": "Open at login",
             "set.loginSub": "NOTCH starts with you",
             "set.durSong": "Song notice length",
             "set.durAgent": "Agent notice length",
+            "set.durWait": "Waiting notice length",
             "set.music": "music", "set.source": "Source",
             "set.data": "data", "set.retention": "History days",
             "set.days": "%d days", "set.storage": "On disk",
@@ -309,6 +321,11 @@ enum NotchStrings {
             "set.local": "NOTCH · 100% local",
             "set.language": "language", "set.languageSub": "NOTCH language (tabs aside)",
             "toast.done": "%@ finished", "toast.taskDone": "task completed",
+            "toast.needsYou": "%@ needs you",
+            "agents.title": "Live agents", "agents.live": "%d active",
+            "agents.need": "NEED YOU", "agents.working": "WORKING",
+            "agents.recent": "RECENT", "agents.empty": "No active agents",
+            "agents.emptySub": "They show up here while working.",
             "task.title": "Tasks", "task.new": "New task",
             "task.titlePh": "What needs doing…", "task.detailPh": "Detail (optional)",
             "task.anyone": "Anyone", "task.add": "Add",
@@ -331,7 +348,7 @@ enum NotchStrings {
         ],
         "fr": [
             "tab.shelf": "Casier", "tab.focus": "Focus", "tab.mac": "Mac",
-            "tab.activity": "Activité", "tab.music": "Musique", "tab.notes": "Notes",
+            "tab.activity": "Activité", "tab.agents": "Agents", "tab.music": "Musique", "tab.notes": "Notes",
             "tab.tasks": "Tâches",
             "nav.active": "actifs", "nav.idle": "aucun agent",
             "waiting.needs": "a besoin de toi", "waiting.tag": "attente",
@@ -423,12 +440,15 @@ enum NotchStrings {
             "set.songToastSub": "Pastille avec pochette au changement",
             "set.agentToast": "Annonce de fin d'agent",
             "set.agentToastSub": "Pastille quand il finit vraiment",
+            "set.waitToast": "Annonce quand il a besoin de toi",
+            "set.waitToastSub": "Pastille tactile : ouvre le notch pour répondre",
             "set.taskAuto": "Envoi auto des tâches",
             "set.taskAutoSub": "Les envoie à la création (sinon bouton Envoyer)",
             "set.login": "Ouvrir à l'ouverture de session",
             "set.loginSub": "NOTCH démarre avec toi",
             "set.durSong": "Durée annonce morceau",
             "set.durAgent": "Durée annonce agent",
+            "set.durWait": "Durée annonce attente",
             "set.music": "musique", "set.source": "Source",
             "set.data": "données", "set.retention": "Jours d'historique",
             "set.days": "%d jours", "set.storage": "Sur disque",
@@ -442,6 +462,11 @@ enum NotchStrings {
             "set.local": "NOTCH · 100% local",
             "set.language": "langue", "set.languageSub": "Langue de NOTCH (onglets à part)",
             "toast.done": "%@ a terminé", "toast.taskDone": "tâche terminée",
+            "toast.needsYou": "%@ a besoin de toi",
+            "agents.title": "Agents en direct", "agents.live": "%d actifs",
+            "agents.need": "ONT BESOIN DE TOI", "agents.working": "AU TRAVAIL",
+            "agents.recent": "RÉCENTS", "agents.empty": "Aucun agent actif",
+            "agents.emptySub": "Ils apparaissent ici pendant le travail.",
             "task.title": "Tâches", "task.new": "Nouvelle tâche",
             "task.titlePh": "À faire…", "task.detailPh": "Détail (optionnel)",
             "task.anyone": "N'importe qui", "task.add": "Ajouter",
@@ -464,7 +489,7 @@ enum NotchStrings {
         ],
         "de": [
             "tab.shelf": "Ablage", "tab.focus": "Fokus", "tab.mac": "Mac",
-            "tab.activity": "Aktivität", "tab.music": "Musik", "tab.notes": "Notizen",
+            "tab.activity": "Aktivität", "tab.agents": "Agenten", "tab.music": "Musik", "tab.notes": "Notizen",
             "tab.tasks": "Aufgaben",
             "nav.active": "aktiv", "nav.idle": "keine Agents",
             "waiting.needs": "braucht dich", "waiting.tag": "wartet",
@@ -556,12 +581,15 @@ enum NotchStrings {
             "set.songToastSub": "Pille mit Cover bei neuem Song",
             "set.agentToast": "Agent-fertig-Hinweis",
             "set.agentToastSub": "Pille, wenn er wirklich fertig ist",
+            "set.waitToast": "Hinweis, wenn er dich braucht",
+            "set.waitToastSub": "Tippbare Pille: öffnet das Notch zum Antworten",
             "set.taskAuto": "Neue Tasks auto-senden",
             "set.taskAutoSub": "Sendet sie beim Erstellen (sonst Senden-Button)",
             "set.login": "Bei Anmeldung öffnen",
             "set.loginSub": "NOTCH startet mit dir",
             "set.durSong": "Dauer Song-Hinweis",
             "set.durAgent": "Dauer Agent-Hinweis",
+            "set.durWait": "Dauer Warte-Hinweis",
             "set.music": "Musik", "set.source": "Quelle",
             "set.data": "Daten", "set.retention": "Verlaufstage",
             "set.days": "%d Tage", "set.storage": "Auf Platte",
@@ -575,6 +603,11 @@ enum NotchStrings {
             "set.local": "NOTCH · 100% lokal",
             "set.language": "Sprache", "set.languageSub": "NOTCH-Sprache (Tabs ausgenommen)",
             "toast.done": "%@ ist fertig", "toast.taskDone": "Aufgabe erledigt",
+            "toast.needsYou": "%@ braucht dich",
+            "agents.title": "Live-Agenten", "agents.live": "%d aktiv",
+            "agents.need": "BRAUCHEN DICH", "agents.working": "ARBEITEN",
+            "agents.recent": "LETZTE", "agents.empty": "Keine aktiven Agenten",
+            "agents.emptySub": "Sie erscheinen hier während der Arbeit.",
             "task.title": "Aufgaben", "task.new": "Neue Aufgabe",
             "task.titlePh": "Was ist zu tun…", "task.detailPh": "Detail (optional)",
             "task.anyone": "Egal", "task.add": "Hinzufügen",
