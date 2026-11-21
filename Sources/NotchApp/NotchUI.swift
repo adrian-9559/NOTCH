@@ -25,6 +25,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var agentToast = AgentToastController()
     /// Último estado visto por agente: para avisar al terminar.
     private var lastAgentStatus: [AgentID: AgentStatus] = [:]
+    /// Cuándo empezó a trabajar (para ignorar parpadeos cortos).
+    private var workingSince: [AgentID: Date] = [:]
+    /// Generación por agente: un aviso viejo no pisa a uno nuevo.
+    private var doneGen: [AgentID: Int] = [:]
     private var hover = NotchHoverController()
     private var notchAnchorX: CGFloat?
     private var notchTopY: CGFloat?
@@ -110,15 +114,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController?.show(anchorX: notchAnchorX, topY: notchTopY)
     }
 
-    /// Avisa con píldora (como la de música) cuando un agente termina:
-    /// transición working/waiting → done.
+    /// Avisa con píldora (como la de música) cuando un agente termina
+    /// DE VERDAD: solo si trabajó un rato (≥20 s) y el done se mantiene
+    /// 10 s. Así no salta por cada subtarea de una misma petición.
     private func announceFinished(_ fresh: [AgentSession]) {
         for s in fresh {
             let prev = lastAgentStatus[s.agent]
             lastAgentStatus[s.agent] = s.status
+            if s.status == .working || s.status == .waiting {
+                if prev != .working, prev != .waiting {
+                    workingSince[s.agent] = Date()
+                }
+                continue
+            }
             guard s.status == .done,
                   prev == .working || prev == .waiting else { continue }
-            agentToast.show(session: s)
+            let worked = Date().timeIntervalSince(workingSince[s.agent] ?? Date())
+            guard worked >= 20 else { continue }
+            doneGen[s.agent, default: 0] += 1
+            let gen = doneGen[s.agent]!
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                guard let self,
+                      self.doneGen[s.agent] == gen,
+                      self.lastAgentStatus[s.agent] == .done else { return }
+                self.agentToast.show(session: s)
+            }
         }
     }
 

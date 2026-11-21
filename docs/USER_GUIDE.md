@@ -49,8 +49,9 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
     en Codex/VS Code cae en el campo del notch; en el resto queda copiado
     y solo tienes que pulsar `⌘V` en la ventana del agente.
   - **Abrir**: trae al frente la ventana del agente.
-- **Aviso "ha terminado"**: cuando un agente acaba sale del notch una
-  píldora con su color y qué ha terminado; se oculta sola.
+- **Aviso "ha terminado"**: cuando un agente acaba DE VERDAD sale del
+  notch una píldora con su color y qué ha terminado; se oculta sola.
+  (Si solo hace una pausa entre subtareas, no molesta.)
 - **Auto-send (opcional)**: en el modal de Ajustes (`⚙` o `⌘,`) puedes
   activar que la respuesta se envíe sola con Enter. macOS pedirá permiso de
   **Accesibilidad** una sola vez. Sin este permiso, NOTCH copia al portapapeles
@@ -65,9 +66,10 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
   píldora con la carátula en pequeño, el título y el ecualizador; se
   oculta sola a los pocos segundos.
 - **Cover y onda junto al notch**: mientras suena algo, del notch sale una
-  píldora negra con la carátula, el tiempo y la barra de progreso, con el
-  borde iluminado del color de la canción (como Lumio, sin agentes ni
-  tiempos). Al pausar se atenúa; al cerrar el reproductor desaparece.
+  píldora negra total con la carátula en un extremo, el tiempo y la barra
+  en el centro y la onda en el otro extremo, con el borde iluminado del
+  color de la canción (como Lumio, sin agentes ni tiempos). Al pausar se
+  atenúa; al cerrar el reproductor desaparece.
 
 ## Pestañas
 

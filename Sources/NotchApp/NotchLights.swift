@@ -22,8 +22,8 @@ struct NotchLightsView: View {
     var body: some View {
         HStack {
             Spacer(minLength: 0)
-            HStack(spacing: 10) {
-                // Carátula en pequeño.
+            HStack(spacing: 8) {
+                // Carátula en el extremo izquierdo.
                 Group {
                     if let art = music.artwork {
                         Image(nsImage: art)
@@ -36,30 +36,45 @@ struct NotchLightsView: View {
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                             Image(systemName: "music.note")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.9))
                         }
                     }
                 }
-                .frame(width: 30, height: 30)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                // Tiempo + progreso, como Lumio.
+                .frame(width: 24, height: 24)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                Spacer(minLength: 8)
+                // Tiempo + progreso en el centro.
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(fmt(music.position))
-                        .font(.notchMono(13))
+                        .font(.notchMono(12))
                         .monospacedDigit()
                         .foregroundStyle(.white)
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.2)).frame(width: 90, height: 3)
+                        Capsule().fill(Color.white.opacity(0.2)).frame(width: 70, height: 3)
                         Capsule()
                             .fill(Color.white.opacity(0.9))
-                            .frame(width: max(3, 90 * fraction), height: 3)
+                            .frame(width: max(3, 70 * fraction), height: 3)
                     }
                     .animation(.linear(duration: 0.5), value: music.position)
                 }
+                Spacer(minLength: 8)
+                // Símbolo de sonido en el extremo derecho.
+                if music.playing {
+                    SongEQ(
+                        c1: music.tint ?? .white,
+                        c2: music.tint2 ?? music.tint ?? .gray,
+                        barWidth: 2.5,
+                        maxHeight: 13
+                    )
+                } else {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.6))
+                }
             }
-            .padding(.horizontal, 12)
-            .frame(width: 300, height: 52)
+            .padding(.horizontal, 10)
+            .frame(width: 300, height: 40)
             .background(pillGlass)
             .opacity(music.playing ? 1 : 0.8)
             Spacer(minLength: 0)
@@ -77,16 +92,11 @@ struct NotchLightsView: View {
             style: .continuous
         )
         let edge = music.tint ?? .white
+        // Negra total por dentro; el color solo vive en el halo y el filo.
         return ZStack {
             // Halo exterior del color de la canción (borde de Lumio).
             shape.fill(edge.opacity(0.5)).blur(radius: 10)
             shape.fill(Color.black)
-            shape.fill(
-                LinearGradient(
-                    colors: [(music.tint ?? .clear).opacity(0.22), .clear],
-                    startPoint: .top, endPoint: .bottom
-                )
-            )
         }
         .overlay(shape.stroke(edge.opacity(0.55), lineWidth: 1))
         .shadow(color: edge.opacity(0.45), radius: 10)
@@ -110,7 +120,7 @@ final class NotchLightsController {
         for entry in notches where entry.layout.hasNotch {
             let n = entry.layout.notchRect
             // Centrada en el notch, pegada arriba: como si saliera de él.
-            let w: CGFloat = 300, h: CGFloat = 52
+            let w: CGFloat = 300, h: CGFloat = 40
             let frame = NSRect(x: n.midX - w / 2, y: n.maxY - h, width: w, height: h)
             fputs("NOTCH-LIGHTS notch=\(n) pill=\(frame)\n", stderr)
             panels.append(makePanel(frame: frame, onTap: onTap))
