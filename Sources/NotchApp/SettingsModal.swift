@@ -401,8 +401,6 @@ struct SettingsModalView: View {
                             .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.5))
                         Spacer()
                     }
-                    Divider().background(Color.white.opacity(0.07))
-                    IconToggleRow(icon: "checklist", label: tr("set.taskAuto"), subtitle: tr("set.taskAutoSub"), isOn: $settings.autoSendTasks, accent: settings.accent) {}
                 }
             }
             SettingsCard(label: tr("set.songToast"), icon: "bell.fill", accent: settings.accent) {
@@ -412,6 +410,8 @@ struct SettingsModalView: View {
                     IconToggleRow(icon: "person.fill.checkmark", label: tr("set.agentToast"), subtitle: tr("set.agentToastSub"), isOn: $settings.agentToastEnabled, accent: settings.accent) {}
                     Divider().background(Color.white.opacity(0.07))
                     IconToggleRow(icon: "hand.raised.fill", label: tr("set.waitToast"), subtitle: tr("set.waitToastSub"), isOn: $settings.waitToastEnabled, accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    IconToggleRow(icon: "bell.badge.fill", label: tr("set.reminders"), subtitle: tr("set.remindersSub"), isOn: $settings.remindersEnabled, accent: settings.accent) {}
                     Divider().background(Color.white.opacity(0.07))
                     DurationRow(label: tr("set.durSong"), value: $settings.songToastSeconds, accent: settings.accent)
                     DurationRow(label: tr("set.durAgent"), value: $settings.agentToastSeconds, accent: settings.accent)

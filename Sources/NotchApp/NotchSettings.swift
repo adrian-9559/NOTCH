@@ -40,10 +40,6 @@ final class NotchSettings: ObservableObject {
     @Published var waitToastEnabled: Bool {
         didSet { save() }
     }
-    /// Auto-enviar tareas nuevas al crearlas (si no, botón Enviar).
-    @Published var autoSendTasks: Bool {
-        didSet { save() }
-    }
     /// Idioma de NOTCH (es/en/fr/de).
     @Published var langCode: String {
         didSet { save() }
@@ -76,6 +72,10 @@ final class NotchSettings: ObservableObject {
     @Published var clipAutoPaste: Bool {
         didSet { save() }
     }
+    /// Avisos de recordatorios (píldora y/o sistema según el evento).
+    @Published var remindersEnabled: Bool {
+        didSet { save() }
+    }
     /// Clips guardados en memoria.
     @Published var clipMax: Double {
         didSet { save() }
@@ -104,7 +104,6 @@ final class NotchSettings: ObservableObject {
         songToastEnabled = d.object(forKey: "notchSongToast") as? Bool ?? true
         agentToastEnabled = d.object(forKey: "notchAgentToast") as? Bool ?? true
         waitToastEnabled = d.object(forKey: "notchWaitToast") as? Bool ?? true
-        autoSendTasks = d.object(forKey: "notchAutoSendTasks") as? Bool ?? false
         langCode = d.string(forKey: "notchLang") ?? NotchLang.system().rawValue
         songToastSeconds = d.object(forKey: "notchSongToastSecs") as? Double ?? 4.5
         agentToastSeconds = d.object(forKey: "notchAgentToastSecs") as? Double ?? 5.0
@@ -114,6 +113,7 @@ final class NotchSettings: ObservableObject {
         musicSource = ["auto", "Music", "Spotify"].contains(ms) ? ms : "auto"
         clipHotkeyEnabled = d.object(forKey: "notchClipHotkey") as? Bool ?? true
         clipAutoPaste = d.object(forKey: "notchClipAutoPaste") as? Bool ?? false
+        remindersEnabled = d.object(forKey: "notchRemindersEnabled") as? Bool ?? true
         clipMax = d.object(forKey: "notchClipMax") as? Double ?? 30
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
@@ -153,7 +153,6 @@ final class NotchSettings: ObservableObject {
         d.set(songToastEnabled, forKey: "notchSongToast")
         d.set(agentToastEnabled, forKey: "notchAgentToast")
         d.set(waitToastEnabled, forKey: "notchWaitToast")
-        d.set(autoSendTasks, forKey: "notchAutoSendTasks")
         d.set(langCode, forKey: "notchLang")
         d.set(songToastSeconds, forKey: "notchSongToastSecs")
         d.set(agentToastSeconds, forKey: "notchAgentToastSecs")
@@ -162,6 +161,7 @@ final class NotchSettings: ObservableObject {
         d.set(musicSource, forKey: "notchMusicSource")
         d.set(clipHotkeyEnabled, forKey: "notchClipHotkey")
         d.set(clipAutoPaste, forKey: "notchClipAutoPaste")
+        d.set(remindersEnabled, forKey: "notchRemindersEnabled")
         d.set(clipMax, forKey: "notchClipMax")
     }
 }

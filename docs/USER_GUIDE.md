@@ -85,9 +85,9 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 | Agentes | **Respuestas en un sitio**: lista en vivo — los que trabajan salen **cargando** (spinner + %CPU), y el que te **pregunta** sale expandido con la pregunta y sus respuestas (**Permitir** / escribir / **Enviar** / **Abrir**). Si el notch está cerrado, sale la píldora **"X te necesita"**: tócala y el notch se abre aquí. Anti-spam: el aviso de fin solo sale tras 45 s quieto y no se repite en el mismo request. |
 | Música | Reproducción estilo Lumio: carátula con vinilo asomando, título, barra de progreso con tiempos y controles ⏮ ⏸ ⏭. **El panel se ilumina con el color de la canción** (extraído de la carátula). Music.app y Spotify. |
 | Controles | Botones, interruptores, selectores y steppers 100% propios de NOTCH: siguen tu color de acento (el timer va en verde Lumio). |
-| Notas | **Entrada command-bar** (icono, foco con filo de acento, botón limpiar y pista ⏎) con confirmación ✓ y **últimas capturas** con hora. Se guarda en `~/NOTCH-notes/`, en tu daily note de Obsidian o en Apple Notes. **Historial como línea temporal**: punto de luz por hora con barra degradada y agentes implicados, navegable por días. |
+| Notas | Nota rápida (command-bar) + **portapapeles local estilo Win+V**: historial solo en memoria (clic=copiar, auto-pegar opcional), popup junto al cursor con **doble-⌘-derecho** (↑↓+Enter, 1-8, Esc). Requiere Input Monitoring para el atajo. |
 | ⚙ | Es el botón de la derecha en la navbar (o `⌘,`): abre el **modal de Ajustes** — color y opacidad, **idioma** (ES/EN/FR/DE), pestañas, comportamiento (hover, auto-send, avisos con duración, auto-envío de tareas, login), **música** (fuente), **datos** (retención, tamaño, borrado) y privacidad. |
-| Tareas | **Secciones estilo Linear** (En curso / Pte. / Hechas con contador + Archivadas plegable): tarjetas con **carril de prioridad**, estado clicable, chip de agente y fecha; al expandir: detalle + **Enviar** ✈, reorden ↑↓, archivar y papelera. Contadores en cabecera y filtro por agente. |
+| Tareas | **Tareas personales** (sin agentes): **calendario mensual** con puntos y filtro por día, **quick-add** (título + Hoy/Mañana) para clase, secciones En curso/Pte./Hechas/Archivadas. Cada evento configura **fecha + aviso** (píldora / sistema / ambas / nada); el planificador avisa una sola vez. |
 
 ## Privacidad
 

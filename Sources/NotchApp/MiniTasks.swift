@@ -21,30 +21,66 @@ enum TaskPriority: Int, Codable, CaseIterable {
     case high = 2
 }
 
+/// Cómo avisa un recordatorio (configurable por evento).
+enum TaskNotify: String, Codable, CaseIterable {
+    case pill
+    case system
+    case both
+    case none
+}
+
 struct AgentTask: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var title: String
     var detail: String = ""
-    /// AgentID.rawValue destino, nil = cualquiera.
-    var agentRaw: String?
     var priority: TaskPriority = .normal
     var status: TaskStatus = .todo
     var createdAt: Date = Date()
-    var sentAt: Date?
     var doneAt: Date?
-
-    var agent: AgentID? {
-        get { agentRaw.flatMap(AgentID.init(rawValue:)) }
-        set { agentRaw = newValue?.rawValue }
-    }
+    /// Vencimiento (calendario) y aviso (recordatorio), personales.
+    var dueAt: Date?
+    var remindAt: Date?
+    var notifyMode: TaskNotify = .both
+    /// Ya avisado (no repetir, ni tras reiniciar).
+    var remindedAt: Date?
 
     var isOpen: Bool { status == .todo || status == .doing }
+
+    // Decodificación tolerante: los ficheros viejos no traen las claves
+    // nuevas (dueAt…) y las desconocidas (agentRaw…) se ignoran.
+    enum CodingKeys: String, CodingKey {
+        case id, title, detail, priority, status, createdAt, doneAt
+        case dueAt, remindAt, notifyMode, remindedAt
+    }
+
+    init(title: String, detail: String = "", priority: TaskPriority = .normal,
+         dueAt: Date? = nil, remindAt: Date? = nil, notifyMode: TaskNotify = .both) {
+        self.title = title
+        self.detail = detail
+        self.priority = priority
+        self.dueAt = dueAt
+        self.remindAt = remindAt
+        self.notifyMode = notifyMode
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        detail = try c.decodeIfPresent(String.self, forKey: .detail) ?? ""
+        priority = try c.decodeIfPresent(TaskPriority.self, forKey: .priority) ?? .normal
+        status = try c.decodeIfPresent(TaskStatus.self, forKey: .status) ?? .todo
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        doneAt = try c.decodeIfPresent(Date.self, forKey: .doneAt)
+        dueAt = try c.decodeIfPresent(Date.self, forKey: .dueAt)
+        remindAt = try c.decodeIfPresent(Date.self, forKey: .remindAt)
+        notifyMode = try c.decodeIfPresent(TaskNotify.self, forKey: .notifyMode) ?? .both
+        remindedAt = try c.decodeIfPresent(Date.self, forKey: .remindedAt)
+    }
 }
 
 final class TaskStore: ObservableObject {
     @Published private(set) var tasks: [AgentTask] = []
-    /// Último error de envío (se muestra en la cabecera).
-    @Published var lastError: String = ""
 
     private func tasksFile() -> URL {
         let dir = FileManager.default.homeDirectoryForCurrentUser
@@ -56,25 +92,38 @@ final class TaskStore: ObservableObject {
     // MARK: - persistencia
 
     func load() {
-        guard let data = try? Data(contentsOf: tasksFile()),
-              let decoded = try? JSONDecoder().decode([AgentTask].self, from: data) else { return }
-        tasks = decoded
+        guard let data = try? Data(contentsOf: tasksFile()) else { return }
+        do {
+            let dec = JSONDecoder()
+            dec.dateDecodingStrategy = .secondsSince1970
+            tasks = try dec.decode([AgentTask].self, from: data)
+        } catch {
+            fputs("NOTCH-DBG tasks-decode-error: \(error)\n", stderr)
+        }
     }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(tasks) else { return }
+        guard let data = try? configuredEncoder().encode(tasks) else { return }
         try? data.write(to: tasksFile(), options: .atomic)
+    }
+
+    private func configuredEncoder() -> JSONEncoder {
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .secondsSince1970
+        return enc
     }
 
     // MARK: - mutaciones (todas persisten)
 
     @discardableResult
-    func add(title: String, detail: String = "", agent: AgentID? = nil,
-             priority: TaskPriority = .normal) -> AgentTask? {
+    func add(title: String, detail: String = "",
+             priority: TaskPriority = .normal,
+             dueAt: Date? = nil, remindAt: Date? = nil,
+             notifyMode: TaskNotify = .both) -> AgentTask? {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return nil }
-        var task = AgentTask(title: t, detail: detail, priority: priority)
-        task.agent = agent
+        let task = AgentTask(title: t, detail: detail, priority: priority,
+                             dueAt: dueAt, remindAt: remindAt, notifyMode: notifyMode)
         tasks.insert(task, at: 0)
         save()
         return task
@@ -138,11 +187,24 @@ final class TaskStore: ObservableObject {
 
     // MARK: - consultas
 
-    func filtered(status: TaskStatus?, agent: AgentID?) -> [AgentTask] {
+    /// Tareas cuyo aviso toca (recordatorio vencido, modo con aviso,
+    /// aún no avisadas). Puro para programar y testear.
+    func dueReminders(now: Date = Date()) -> [AgentTask] {
         tasks.filter { t in
-            (status == nil || t.status == status) &&
-            (agent == nil || t.agentRaw == agent?.rawValue)
+            guard t.isOpen, t.notifyMode != .none, t.remindedAt == nil,
+                  let r = t.remindAt, r <= now else { return false }
+            return true
         }
+    }
+
+    /// Marca avisadas (persiste: no repite ni tras reiniciar).
+    func markReminded(_ ids: [UUID]) {
+        var changed = false
+        for i in tasks.indices where ids.contains(tasks[i].id) && tasks[i].remindedAt == nil {
+            tasks[i].remindedAt = Date()
+            changed = true
+        }
+        if changed { save() }
     }
 
     var openCount: Int { tasks.filter(\.isOpen).count }
@@ -153,65 +215,38 @@ final class TaskStore: ObservableObject {
     }
 }
 
-// MARK: - Envío a agentes (A3): manual por defecto + auto-envío opcional
+// MARK: - Vista: cola personal con calendario y recordatorios
 
-/// Entrega la tarea al agente por los canales existentes (iTerm directo,
-/// reply del notch o portapapeles + focus). Marca enviada y en curso.
-enum TaskDispatcher {
-    @discardableResult
-    static func send(_ task: AgentTask, via sessions: SessionStore, store: TaskStore) -> Bool {
-        let session: AgentSession?
-        if let a = task.agent {
-            session = sessions.sessions.first { $0.agent == a }
-        } else {
-            session = sessions.active.first ?? sessions.sessions.first
-        }
-        guard let s = session else {
-            store.lastError = tr("task.noSession")
-            return false
-        }
-        let msg = task.detail.isEmpty ? task.title : "\(task.title)\n\(task.detail)"
-        if !HandoffService.deliver(path: msg, to: s) {
-            // Fallback: al portapapeles + ventana al frente para pegar.
-            let pb = NSPasteboard.general
-            pb.clearContents()
-            pb.setString(msg, forType: .string)
-            ReplyService.shared.focus(session: s)
-        }
-        var t = task
-        t.sentAt = Date()
-        if t.status == .todo { t.status = .doing }
-        store.update(t)
-        store.lastError = ""
-        return true
-    }
-}
-
-// MARK: - Vista (A2): lista estilo Notion con filtros y reorden
-
-/// Pestaña Tareas: crear, filtrar por estado/agente, reordenar con ↑↓,
-/// archivar y eliminar. El envío a agentes llega en A3.
+/// Pestaña Tareas personales: calendario con recordatorios, añadido
+/// rápido (Hoy/Mañana) y secciones por estado. Sin agentes.
 struct TasksView: View {
     @ObservedObject var tasks: TaskStore
-    var sessions: SessionStore?
     @ObservedObject private var settings = NotchSettings.shared
     @State private var showAdd = false
     @State private var title = ""
     @State private var detail = ""
-    @State private var agentRaw: String?
     @State private var priority: TaskPriority = .normal
-    @State private var agentFilterRaw: String? = nil
+    @State private var quickDue: QuickDue = .none
     @State private var expanded: UUID? = nil
     @State private var showArchived = false
+    @State private var monthOffset = 0
+    @State private var selectedDay: Date? = nil
 
-    private var agentFiltered: [AgentTask] {
-        tasks.tasks.filter { t in
-            agentFilterRaw == nil || t.agentRaw == agentFilterRaw
+    enum QuickDue {
+        case none, today, tomorrow
+    }
+
+    private var shown: [AgentTask] {
+        let cal = Calendar.current
+        return tasks.tasks.filter { t in
+            guard let day = selectedDay else { return true }
+            guard let due = t.dueAt else { return false }
+            return cal.isDate(due, inSameDayAs: day)
         }
     }
 
     private func inStatus(_ st: TaskStatus) -> [AgentTask] {
-        agentFiltered.filter { $0.status == st }
+        shown.filter { $0.status == st }
     }
 
     /// Cabecera de sección estilo Linear: punto + nombre + contador.
@@ -231,7 +266,7 @@ struct TasksView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Cabecera de misión: título + abiertas + hoy + auto + añadir.
+            // Cabecera: título + abiertas + hoy + añadir rápido.
             HStack(spacing: 8) {
                 Text(tr("task.title"))
                     .font(.notchMono(11))
@@ -255,8 +290,6 @@ struct TasksView: View {
                     .background(Capsule().fill(Color.white.opacity(0.07)))
                 }
                 Spacer()
-                Toggle(tr("task.auto"), isOn: $settings.autoSendTasks)
-                    .font(.caption2).toggleStyle(NotchToggleStyle(color: settings.accent, mini: true))
                 Button {
                     showAdd.toggle()
                     if !showAdd { resetForm() }
@@ -267,123 +300,42 @@ struct TasksView: View {
                 }
                 .buttonStyle(NotchGhostButton(size: .small))
             }
-            if !tasks.lastError.isEmpty {
-                Text(tasks.lastError).font(.caption2).foregroundStyle(.red.opacity(0.9)).lineLimit(1)
-            }
             if showAdd {
                 addForm
             }
-            // Filtro por agente (el estado va por secciones).
-            HStack(spacing: 6) {
-                Spacer()
-                Menu(agentFilterRaw.flatMap({ AgentID(rawValue: $0)?.displayName }) ?? tr("task.anyone")) {
-                    Button(tr("task.anyone")) { agentFilterRaw = nil }
-                    ForEach(AgentID.allCases, id: \.self) { a in
-                        Button(a.displayName) { agentFilterRaw = a.rawValue }
-                    }
-                }
-                .controlSize(.mini)
-            }
-            if agentFiltered.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "checklist")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Color.white.opacity(0.25))
-                    Text(agentFilterRaw == nil ? tr("task.empty") : tr("act.empty"))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 14)
-            } else {
-                let todos = inStatus(.todo), doings = inStatus(.doing)
-                let dones = inStatus(.done), archived = inStatus(.archived)
-                if !doings.isEmpty {
-                    sectionHeader(tr("task.doing"), count: doings.count, color: settings.accent)
-                    ForEach(doings) { task in
-                        TaskRow(
-                            task: task, store: tasks, sessions: sessions,
-                            expanded: expanded == task.id,
-                            onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
-                        )
-                    }
-                }
-                if !todos.isEmpty {
-                    sectionHeader(tr("task.todo"), count: todos.count, color: Color.white.opacity(0.5))
-                    ForEach(todos) { task in
-                        TaskRow(
-                            task: task, store: tasks, sessions: sessions,
-                            expanded: expanded == task.id,
-                            onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
-                        )
-                    }
-                }
-                if !dones.isEmpty {
-                    sectionHeader(tr("task.done"), count: dones.count, color: Color(hex: "2F9E6E"))
-                    ForEach(dones) { task in
-                        TaskRow(
-                            task: task, store: tasks, sessions: sessions,
-                            expanded: expanded == task.id,
-                            onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
-                        )
-                    }
-                }
-                if !archived.isEmpty {
-                    Button {
-                        showArchived.toggle()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: showArchived ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(Color.white.opacity(0.4))
-                                .frame(width: 12)
-                            Text(tr("task.archived").uppercased())
-                                .font(.notchMono(10))
-                                .foregroundStyle(Color.white.opacity(0.4))
-                                .kerning(1.2)
-                            Text("\(archived.count)")
-                                .font(.notchMono(10))
-                                .foregroundStyle(Color.white.opacity(0.3))
-                                .monospacedDigit()
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    if showArchived {
-                        ForEach(archived) { task in
-                            TaskRow(
-                                task: task, store: tasks, sessions: sessions,
-                                expanded: expanded == task.id,
-                                onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
-                            )
-                        }
-                    }
+            monthCalendar
+            if let day = selectedDay {
+                HStack(spacing: 6) {
+                    Text(dayTitle(day))
+                        .font(.notchMono(10))
+                        .foregroundStyle(settings.accent)
+                    Spacer()
+                    Button(tr("task.clearDay")) { selectedDay = nil }
+                        .buttonStyle(NotchGhostButton(size: .mini))
                 }
             }
+            taskSections
         }
         .padding(8)
         .onAppear { tasks.load() }
     }
 
+    // MARK: - Añadido rápido (para clase: título + Hoy/Mañana + listo)
+
     private var addForm: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                NotchTextField(
-                    placeholder: tr("task.titlePh"), text: $title,
-                    icon: "plus.circle.fill", hint: "⏎",
-                    color: settings.accent, onCommit: add
-                )
-            }
+            NotchTextField(
+                placeholder: tr("task.titlePh"), text: $title,
+                icon: "bolt.fill", hint: "⏎",
+                color: settings.accent, onCommit: add
+            )
             NotchTextField(
                 placeholder: tr("task.detailPh"), text: $detail,
                 color: settings.accent, font: .caption, onCommit: add
             )
-            HStack(spacing: 8) {
-                Menu(agentRaw.flatMap({ AgentID(rawValue: $0)?.displayName }) ?? tr("task.anyone")) {
-                    Button(tr("task.anyone")) { agentRaw = nil }
-                    ForEach(AgentID.allCases, id: \.self) { a in
-                        Button(a.displayName) { agentRaw = a.rawValue }
-                    }
-                }
-                .controlSize(.small)
+            HStack(spacing: 6) {
+                dueChip(.today, label: tr("task.today"))
+                dueChip(.tomorrow, label: tr("task.tomorrow"))
                 NotchSegments(
                     selection: $priority,
                     options: [(TaskPriority.low, tr("task.low")), (.normal, tr("task.normal")), (.high, tr("task.high"))],
@@ -406,20 +358,230 @@ struct TasksView: View {
         )
     }
 
-    private func add() {
-        guard let created = tasks.add(title: title, detail: detail,
-                     agent: agentRaw.flatMap(AgentID.init(rawValue:)),
-                     priority: priority) else { return }
-        resetForm()
-        showAdd = false
-        tasks.lastError = ""
-        if settings.autoSendTasks, let ss = sessions {
-            TaskDispatcher.send(created, via: ss, store: tasks)
+    private func dueChip(_ q: QuickDue, label: String) -> some View {
+        let sel = quickDue == q
+        return Button(label) { quickDue = sel ? .none : q }
+            .font(.system(size: 11, weight: sel ? .semibold : .regular))
+            .foregroundStyle(sel ? settings.accent : Color.white.opacity(0.6))
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(sel ? settings.accent.opacity(0.18) : Color.white.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(sel ? settings.accent.opacity(0.5) : Color.white.opacity(0.09), lineWidth: 1)
+            )
+            .buttonStyle(.plain)
+    }
+
+    private func quickDates() -> (due: Date?, remind: Date?) {
+        let cal = Calendar.current
+        let now = Date()
+        switch quickDue {
+        case .none:
+            return (nil, nil)
+        case .today:
+            let due = cal.date(bySettingHour: 23, minute: 59, second: 0, of: now)
+            let nine = cal.date(bySettingHour: 9, minute: 0, second: 0, of: now)
+            let remind = (nine ?? now) > now ? nine : now.addingTimeInterval(15 * 60)
+            return (due, remind)
+        case .tomorrow:
+            guard let tm = cal.date(byAdding: .day, value: 1, to: now) else { return (nil, nil) }
+            let due = cal.date(bySettingHour: 23, minute: 59, second: 0, of: tm)
+            let remind = cal.date(bySettingHour: 9, minute: 0, second: 0, of: tm)
+            return (due, remind)
         }
     }
 
+    private func add() {
+        let qd = quickDates()
+        guard tasks.add(title: title, detail: detail, priority: priority,
+                        dueAt: qd.due, remindAt: qd.remind) != nil else { return }
+        resetForm()
+        showAdd = false
+    }
+
     private func resetForm() {
-        title = ""; detail = ""; agentRaw = nil; priority = .normal
+        title = ""; detail = ""; priority = .normal; quickDue = .none
+    }
+
+    // MARK: - Calendario mensual con puntos y filtro por día
+
+    private var monthBase: Date {
+        Calendar.current.date(byAdding: .month, value: monthOffset, to: Date()) ?? Date()
+    }
+
+    private func dueDays() -> Set<Date> {
+        let cal = Calendar.current
+        var out = Set<Date>()
+        for t in tasks.tasks {
+            guard let d = t.dueAt else { continue }
+            out.insert(cal.startOfDay(for: d))
+        }
+        return out
+    }
+
+    private var monthCalendar: some View {
+        let cal = Calendar.current
+        let comps = cal.dateComponents([.year, .month], from: monthBase)
+        let first = cal.date(from: comps) ?? Date()
+        let range = cal.range(of: .day, in: .month, for: first) ?? 1..<30
+        let lead = (cal.component(.weekday, from: first) - cal.firstWeekday + 7) % 7
+        let days = dueDays()
+        let today = cal.startOfDay(for: Date())
+        let monthName: String = {
+            let f = DateFormatter(); f.locale = .current; f.dateFormat = "LLLL yyyy"
+            return f.string(from: first).capitalized
+        }()
+        return VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Button { monthOffset -= 1 } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
+                }
+                .buttonStyle(NotchGhostButton(size: .mini))
+                Text(monthName)
+                    .font(.notchMono(11))
+                    .foregroundStyle(.white.opacity(0.85))
+                Spacer()
+                Button { monthOffset = 0; selectedDay = nil } label: {
+                    Text(tr("act.today"))
+                        .font(.notchMono(10))
+                        .foregroundStyle(settings.accent)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+                Button { monthOffset += 1 } label: {
+                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
+                }
+                .buttonStyle(NotchGhostButton(size: .mini))
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 2) {
+                ForEach(0..<lead, id: \.self) { _ in Color.clear.frame(height: 26) }
+                ForEach(range.lowerBound..<range.upperBound, id: \.self) { d in
+                    let date = cal.date(byAdding: .day, value: d - 1, to: first) ?? first
+                    let sod = cal.startOfDay(for: date)
+                    let isSel = selectedDay.map { cal.isDate($0, inSameDayAs: date) } ?? false
+                    let isToday = cal.isDate(sod, inSameDayAs: today)
+                    Button {
+                        selectedDay = isSel ? nil : date
+                    } label: {
+                        VStack(spacing: 1) {
+                            Text("\(d)")
+                                .font(.notchMono(10))
+                                .foregroundStyle(isSel ? .white : isToday ? settings.accent : Color.white.opacity(0.75))
+                                .monospacedDigit()
+                            Circle()
+                                .fill(days.contains(sod) ? settings.accent : Color.clear)
+                                .frame(width: 4, height: 4)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 26)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(isSel ? settings.accent.opacity(0.25) : isToday ? settings.accent.opacity(0.12) : Color.clear)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func dayTitle(_ d: Date) -> String {
+        let f = DateFormatter(); f.locale = .current
+        let cal = Calendar.current
+        if cal.isDateInToday(d) { return tr("act.today") }
+        f.dateStyle = .medium; f.timeStyle = .none
+        return f.string(from: d)
+    }
+
+    // MARK: - Secciones por estado
+
+    @ViewBuilder
+    private var taskSections: some View {
+        if shown.isEmpty {
+            VStack(spacing: 6) {
+                Image(systemName: "checklist")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.white.opacity(0.25))
+                Text(selectedDay == nil ? tr("task.empty") : tr("act.empty"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 14)
+        } else {
+            let todos = inStatus(.todo), doings = inStatus(.doing)
+            let dones = inStatus(.done), archived = inStatus(.archived)
+            if !doings.isEmpty {
+                sectionHeader(tr("task.doing"), count: doings.count, color: settings.accent)
+                ForEach(doings) { task in
+                    TaskRow(
+                        task: task, store: tasks,
+                        expanded: expanded == task.id,
+                        onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
+                    )
+                }
+            }
+            if !todos.isEmpty {
+                sectionHeader(tr("task.todo"), count: todos.count, color: Color.white.opacity(0.5))
+                ForEach(todos) { task in
+                    TaskRow(
+                        task: task, store: tasks,
+                        expanded: expanded == task.id,
+                        onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
+                    )
+                }
+            }
+            if !dones.isEmpty {
+                sectionHeader(tr("task.done"), count: dones.count, color: Color(hex: "2F9E6E"))
+                ForEach(dones) { task in
+                    TaskRow(
+                        task: task, store: tasks,
+                        expanded: expanded == task.id,
+                        onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
+                    )
+                }
+            }
+            if !archived.isEmpty {
+                Button {
+                    showArchived.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: showArchived ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                            .frame(width: 12)
+                        Text(tr("task.archived").uppercased())
+                            .font(.notchMono(10))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                            .kerning(1.2)
+                        Text("\(archived.count)")
+                            .font(.notchMono(10))
+                            .foregroundStyle(Color.white.opacity(0.3))
+                            .monospacedDigit()
+                    }
+                }
+                .buttonStyle(.plain)
+                if showArchived {
+                    ForEach(archived) { task in
+                        TaskRow(
+                            task: task, store: tasks,
+                            expanded: expanded == task.id,
+                            onToggleExpand: { expanded = expanded == task.id ? nil : task.id }
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -429,9 +591,59 @@ private struct TaskRow: View {
     var task: AgentTask
     @ObservedObject var store: TaskStore
     @ObservedObject private var settings = NotchSettings.shared
-    var sessions: SessionStore?
     var expanded: Bool
     var onToggleExpand: () -> Void
+
+    private var notifyBinding: Binding<TaskNotify> {
+        Binding(
+            get: { task.notifyMode },
+            set: {
+                var t = task
+                t.notifyMode = $0
+                // Sin aviso no hay hora que valga.
+                if $0 == .none { t.remindAt = nil; t.remindedAt = nil }
+                store.update(t)
+            }
+        )
+    }
+
+    private var dueBinding: Binding<Date> {
+        Binding(
+            get: { task.dueAt ?? Date() },
+            set: {
+                var t = task
+                t.dueAt = $0
+                store.update(t)
+            }
+        )
+    }
+
+    private var remindBinding: Binding<Date> {
+        Binding(
+            get: { task.remindAt ?? Date().addingTimeInterval(3600) },
+            set: {
+                var t = task
+                t.remindAt = $0
+                t.remindedAt = nil
+                if t.notifyMode == .none { t.notifyMode = .both }
+                store.update(t)
+            }
+        )
+    }
+
+    private var isOverdue: Bool {
+        guard task.isOpen, let d = task.dueAt else { return false }
+        return d < Calendar.current.startOfDay(for: Date())
+    }
+
+    private func shortDay(_ d: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(d) { return tr("task.today") }
+        if cal.isDateInTomorrow(d) { return tr("task.tomorrow") }
+        let f = DateFormatter(); f.locale = .current
+        f.dateStyle = .short; f.timeStyle = .none
+        return f.string(from: d)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -457,12 +669,12 @@ private struct TaskRow: View {
                             .strikethrough(task.status == .done)
                             .lineLimit(1)
                         HStack(spacing: 5) {
-                            if let agent = task.agent {
-                                Text(agent.displayName.uppercased())
+                            if let due = task.dueAt {
+                                Text(tr("task.due") + " " + shortDay(due))
                                     .font(.notchMono(8))
-                                    .foregroundStyle(settings.accent)
+                                    .foregroundStyle(isOverdue ? Color(hex: "E0574B") : settings.accent)
                                     .padding(.horizontal, 5).padding(.vertical, 1)
-                                    .background(Capsule().fill(settings.accent.opacity(0.14)))
+                                    .background(Capsule().fill((isOverdue ? Color(hex: "E0574B") : settings.accent).opacity(0.14)))
                             }
                             Text(statusLine)
                                 .font(.caption2)
@@ -488,15 +700,21 @@ private struct TaskRow: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.leading, 32)
                     }
+                    // Fecha + aviso configurable por evento.
+                    VStack(spacing: 4) {
+                        DatePicker(tr("task.due"), selection: dueBinding, displayedComponents: .date)
+                            .font(.caption)
+                        DatePicker(tr("task.remind"), selection: remindBinding, displayedComponents: [.date, .hourAndMinute])
+                            .font(.caption)
+                        NotchSegments(
+                            selection: notifyBinding,
+                            options: [(.pill, tr("task.nPill")), (.system, tr("task.nSystem")), (.both, tr("task.nBoth")), (.none, tr("task.nNone"))],
+                            color: settings.accent
+                        )
+                    }
+                    .padding(.leading, 32)
                     HStack(spacing: 4) {
                         Spacer()
-                        if task.isOpen, sessions != nil {
-                            Button { if let ss = sessions { TaskDispatcher.send(task, via: ss, store: store) } } label: {
-                                Label(tr("task.send"), systemImage: "paperplane.fill")
-                            }
-                            .buttonStyle(NotchPrimaryButton(size: .mini, color: settings.accent))
-                            .help(tr("task.send"))
-                        }
                         Button { move(-1) } label: {
                             Image(systemName: "chevron.up").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 22)
                         }
@@ -576,8 +794,15 @@ private struct TaskRow: View {
         let f = DateFormatter()
         f.locale = .current; f.dateStyle = .short; f.timeStyle = .short
         if let d = task.doneAt { return tr("task.doneAt", f.string(from: d)) }
-        if let s = task.sentAt { return tr("task.sentAt", f.string(from: s)) }
+        if let r = task.remindAt, task.remindedAt == nil { return tr("task.remind") + " " + shortTime(r) }
         return f.string(from: task.createdAt)
+    }
+
+    private func shortTime(_ d: Date) -> String {
+        let f = DateFormatter(); f.locale = .current
+        if Calendar.current.isDateInToday(d) { f.dateFormat = "HH:mm"; return f.string(from: d) }
+        f.dateStyle = .short; f.timeStyle = .short
+        return f.string(from: d)
     }
 
     private func advance() {

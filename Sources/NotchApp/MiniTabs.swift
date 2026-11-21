@@ -42,7 +42,7 @@ enum MiniTabs {
                     Divider()
                     ClipboardView(store: ctx.clips)
                 })),
-                (title: NotchTab.tasks.rawValue, view: AnyView(TasksView(tasks: ctx.tasks, sessions: store))),
+                (title: NotchTab.tasks.rawValue, view: AnyView(TasksView(tasks: ctx.tasks))),
                 // La ⚙ ya no es pestaña: abre el modal SettingsWindowController
                 // desde el botón de la navbar.
             ]

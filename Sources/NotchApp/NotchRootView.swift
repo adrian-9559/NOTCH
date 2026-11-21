@@ -232,6 +232,12 @@ struct NotchRootView: View {
                 selectedTitle = NotchTab.agents.rawValue
             }
         }
+        // El recordatorio (píldora o sistema) abre el panel en Tareas.
+        .onReceive(NotificationCenter.default.publisher(for: .notchShowTasks)) { _ in
+            withAnimation(.snappy(duration: 0.22)) {
+                selectedTitle = NotchTab.tasks.rawValue
+            }
+        }
         // Como Lumio: vidrio oscuro siempre, de día y de noche.
         .environment(\.colorScheme, .dark)
     }

@@ -3,6 +3,7 @@ import AppKit
 import Combine
 import NotchCore
 import SwiftUI
+import UserNotifications
 
 /// App mínima: icono en menu bar + ventana notch + polling cada 2s.
 /// Shelf / mini-features cuelgan de `sessions` aquí.
@@ -16,7 +17,7 @@ final class NotchAppMain: NSObject {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var statusItem: NSStatusItem!
     private var store = SessionStore()
     private var windowController: NotchWindowController?
@@ -42,6 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cola del aviso de espera: igual, con su generación.
     private var waitQueueGen = 0
     private var waitToast = WaitingToastController()
+    /// Píldora de recordatorios + planificador.
+    private var reminderToast = ReminderToastController()
+    private var reminderScheduler = ReminderScheduler()
     private var cancellables = Set<AnyCancellable>()
     private var hover = NotchHoverController()
     /// Poll del bocadillo de navbar (las tracking areas no llegan aquí).
@@ -78,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installHover()
         installNavHover()
         installClipboard()
+        installReminders()
 
         NotificationCenter.default.addObserver(
             self,
@@ -90,6 +95,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshNow()
         }
         refreshNow()
+        // Tocar una notificación del sistema abre el panel en Tareas.
+        // (Solo empaquetada: sin bundle revienta, ver ReminderSystem.)
+        if ReminderSystem.available {
+            UNUserNotificationCenter.current().delegate = self
+        }
 
         // Depuración/atajos de lanzamiento: --settings abre el modal de
         // ajustes al arrancar (útil para capturas y para usuarios).
@@ -131,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toast.hide()
         agentToast.hide()
         waitToast.hide()
+        reminderToast.hide()
         lights.setPanelOpen(true)
         windowController?.show(anchorX: notchAnchorX, topY: notchTopY)
     }
@@ -204,7 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pumpAgentToast(_ s: AgentSession, gen: Int, attempt: Int) {
         guard gen == toastQueueGen, attempt < 12 else { return }
-        if toast.state.visible || agentToast.state.visible || waitToast.state.visible {
+        if toast.state.visible || agentToast.state.visible || waitToast.state.visible || reminderToast.state.visible {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 self?.pumpAgentToast(s, gen: gen, attempt: attempt + 1)
             }
@@ -221,7 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pumpWaitToast(_ s: AgentSession, gen: Int, attempt: Int) {
         guard gen == waitQueueGen, attempt < 12 else { return }
-        if toast.state.visible || agentToast.state.visible || waitToast.state.visible {
+        if toast.state.visible || agentToast.state.visible || waitToast.state.visible || reminderToast.state.visible {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 self?.pumpWaitToast(s, gen: gen, attempt: attempt + 1)
             }
@@ -304,14 +315,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.showPanel()
             NotificationCenter.default.post(name: .notchShowAgents, object: nil)
         }
+        // El recordatorio abre el panel en Tareas.
+        reminderToast.isPanelVisible = { [weak self] in self?.windowController?.isVisible == true }
+        reminderToast.rebuild(notches: notches)
+        reminderToast.onTap = { [weak self] in
+            self?.reminderToast.hide()
+            self?.hover.disarm()
+            self?.showPanel()
+            NotificationCenter.default.post(name: .notchShowTasks, object: nil)
+        }
         // Mientras sale el aviso de canción, la píldora se quita y vuelve al irse.
         toast.state.$visible
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.lights.setToastShowing($0) }
             .store(in: &cancellables)
-        // La música espera si el aviso de agente o la espera están fuera (y viceversa).
+        // La música espera si algún aviso está fuera (y viceversa).
         toast.isBlocked = { [weak self] in
-            self?.agentToast.state.visible == true || self?.waitToast.state.visible == true
+            self?.agentToast.state.visible == true
+                || self?.waitToast.state.visible == true
+                || self?.reminderToast.state.visible == true
         }
     }
 
@@ -375,6 +397,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func toggleClipboard() {
         ClipPopupCenter.shared.toggle(store: NotchContext.shared.clips)
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        if response.notification.request.identifier.hasPrefix("notch-reminder-") {
+            hover.disarm()
+            showPanel()
+            NotificationCenter.default.post(name: .notchShowTasks, object: nil)
+        }
+        completionHandler()
+    }
+
+    // MARK: - Recordatorios de tareas (píldora + sistema por evento)
+
+    private func installReminders() {
+        // Carga ya (la pestaña carga perezosa y el planificador no la abre).
+        NotchContext.shared.tasks.load()
+        reminderScheduler.start(tasks: NotchContext.shared.tasks) { [weak self] due in
+            self?.fireReminders(due)
+        }
+    }
+
+    private func fireReminders(_ due: [AgentTask]) {
+        guard NotchSettings.shared.remindersEnabled else { return }
+        let panelOpen = windowController?.isVisible == true
+        var notified: [UUID] = []
+        for t in due {
+            // Con el panel abierto ya ves las tareas: sin píldora (pero el
+            // sistema sí suena) y no se marca hasta avisar de verdad.
+            let pill = (t.notifyMode == .pill || t.notifyMode == .both) && !panelOpen
+            let system = t.notifyMode == .system || t.notifyMode == .both
+            if pill {
+                reminderToast.show(title: t.title, subtitle: ReminderText.subtitle(for: t))
+                notified.append(t.id)
+            }
+            if system && ReminderSystem.available {
+                ReminderSystem.send(t)
+                if !notified.contains(t.id) { notified.append(t.id) }
+            }
+            if pill || system {
+                fputs("NOTCH-EPISODE reminder task=\(t.title.prefix(40)) mode=\(t.notifyMode.rawValue)\n", stderr)
+            }
+        }
+        // pill-only con panel abierto: reintenta en 30 s (no se marca).
+        NotchContext.shared.tasks.markReminded(notified)
     }
 
     /// Menú del icono (se reconstruye al cambiar el idioma).
