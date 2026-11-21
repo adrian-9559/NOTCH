@@ -175,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notchTopY = nil
             notchWidth = nil
         }
-        lights.rebuild(notches: notches, store: store) { [weak self] in
+        lights.rebuild(notches: notches) { [weak self] in
             self?.toggleNotch()
         }
         // El aura va detrás: se ordena primero y el panel queda delante.

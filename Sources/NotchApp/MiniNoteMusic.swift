@@ -119,6 +119,8 @@ final class MusicStore: ObservableObject {
     @Published var position: Double = 0
     @Published var duration: Double = 0
     @Published var artwork: NSImage?
+    /// Hay reproductor abierto (aunque esté en pausa).
+    @Published var playerLive = false
     /// Color dominante de la carátula: ilumina el panel del notch.
     @Published var tint: Color?
     /// Segundo color de la carátula: degradado del ecualizador.
@@ -154,6 +156,7 @@ final class MusicStore: ObservableObject {
             else if spotifyApp, let r = self.query(app: "Spotify") { hit = (r.0, r.1, r.2, r.3, r.4, "Spotify") }
             DispatchQueue.main.async {
                 self.busy = false
+                self.playerLive = musicApp || spotifyApp
                 if let hit {
                     self.apply(hit)
                 } else {
