@@ -19,8 +19,8 @@ struct NotchRootView: View {
     var onAllow: (AgentSession) -> Void = { _ in }
     var onReply: (AgentSession, String) -> Void = { _, _ in }
     var onOpen: (AgentSession) -> Void = { _ in }
-    /// Pestaña seleccionada por título (sobrevive a reordenar/ocultar).
-    @State private var selectedTitle = "Shelf"
+    /// Pestaña seleccionada por ID (sobrevive a reordenar/ocultar).
+    @State private var selectedTitle = "shelf"
     /// Altura mostrada del área de contenido (se anima a mano: si se
     /// usara withAnimation, la ventana saltaría al final de golpe).
     @State private var shownHeight: CGFloat = 300
@@ -82,9 +82,10 @@ struct NotchRootView: View {
                         // fila (7 pestañas) cabe a su izquierda.
                         HStack(spacing: 3) {
                             ForEach(tabs.indices, id: \.self) { i in
+                                let tabId = NotchTab(rawValue: tabs[i].title)
                                 NavButton(
-                                    title: tabs[i].title,
-                                    icon: iconName(for: tabs[i].title),
+                                    title: tabId?.title ?? tabs[i].title,
+                                    icon: tabId?.icon ?? "gearshape",
                                     selected: i == sel
                                 ) {
                                     withAnimation(.snappy(duration: 0.22)) {
@@ -93,7 +94,7 @@ struct NotchRootView: View {
                                 }
                             }
                             Spacer(minLength: 0)
-                            Text(store.active.isEmpty ? "sin agentes" : "\(store.active.count) activos")
+                            Text(store.active.isEmpty ? tr("nav.idle") : "\(store.active.count) \(tr("nav.active"))")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color.white.opacity(0.8))
                             Button {
@@ -250,11 +251,11 @@ private struct WaitingCard: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
                 Circle().fill(Color(hex: session.agent.notchColorHex)).frame(width: 8, height: 8)
-                Text("\(session.agent.displayName) te necesita")
+                Text("\(session.agent.displayName) \(tr("waiting.needs"))")
                     .font(.notchMono(12))
                     .foregroundStyle(.white)
                 Spacer()
-                Text("espera")
+                Text(tr("waiting.tag"))
                     .font(.notchMono(10))
                     .foregroundStyle(settings.accent)
             }
@@ -263,19 +264,19 @@ private struct WaitingCard: View {
                 .foregroundStyle(Color.white.opacity(0.6))
                 .lineLimit(2)
             HStack(spacing: 6) {
-                Button("Allow") { onAllow(session) }
+                Button(tr("waiting.allow")) { onAllow(session) }
                     .buttonStyle(.borderedProminent)
                     .tint(settings.accent)
                     .controlSize(.small)
-                TextField("Responder…", text: $replyText, onCommit: {
+                TextField(tr("waiting.replyPh"), text: $replyText, onCommit: {
                     onReply(session, replyText); replyText = ""
                 })
                 .textFieldStyle(.roundedBorder)
                 .font(.notchMono(11))
-                Button("Enviar") { onReply(session, replyText); replyText = "" }
+                Button(tr("waiting.send")) { onReply(session, replyText); replyText = "" }
                     .controlSize(.small)
                     .disabled(replyText.isEmpty)
-                Button("Abrir") { onOpen(session) }
+                Button(tr("waiting.open")) { onOpen(session) }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }
@@ -297,9 +298,8 @@ private struct WaitingCard: View {
     }
 }
 
-/// Botón del menú de navegación, con la píldora magenta de Lumio
-/// (color configurable en Ajustes). Orgánico: esquinas suaves, brillo
-/// sutil en la píldora activa y rebote al seleccionar.
+/// Botón de la navbar: píldora con degradado de acento al seleccionar,
+/// borde sutil y brillo. Pequeño para caber a la izquierda del notch.
 private struct NavButton: View {
     var title: String
     var icon: String
@@ -310,15 +310,16 @@ private struct NavButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .medium))
-                .frame(width: 24, height: 18)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(selected ? settings.accent : Color.white.opacity(0.10))
-                        .shadow(
-                            color: selected ? settings.accent.opacity(0.45) : .clear,
-                            radius: 4, y: 2
-                        )
+                .font(.system(size: 10, weight: .semibold))
+                .frame(width: 26, height: 20)
+                .background(pillBg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(selected ? 0.25 : 0.08), lineWidth: 1)
+                )
+                .shadow(
+                    color: selected ? settings.accent.opacity(0.5) : .clear,
+                    radius: 6, y: 2
                 )
                 .scaleEffect(selected ? 1.0 : 0.96)
                 // Área de clic mayor que la píldora visual.
@@ -329,6 +330,23 @@ private struct NavButton: View {
         .help(title)
         .controlSize(.mini)
         .animation(.snappy(duration: 0.22), value: selected)
+    }
+
+    @ViewBuilder
+    private var pillBg: some View {
+        if selected {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [settings.accent, settings.accent.opacity(0.75)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.09))
+        }
     }
 }
 
@@ -342,16 +360,9 @@ private struct ContentHeightKey: PreferenceKey {
     }
 }
 
+/// Compatibilidad: ahora manda `NotchTab.icon` (IDs estables).
 func iconName(for title: String) -> String {
-    switch title {
-    case "Shelf": return "tray"
-    case "Focus": return "timer"
-    case "Mac": return "cpu"
-    case "Actividad": return "chart.bar"
-    case "Música": return "music.note"
-    case "Notas": return "note.text"
-    default: return "gearshape"
-    }
+    NotchTab(rawValue: title)?.icon ?? "gearshape"
 }
 
 extension Color {

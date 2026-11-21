@@ -30,6 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var workingSince: [AgentID: Date] = [:]
     /// Generación por agente: un aviso viejo no pisa a uno nuevo.
     private var doneGen: [AgentID: Int] = [:]
+    /// Cola del aviso de agente: sale cuando ningún otro aviso está fuera.
+    private var toastQueueGen = 0
     private var cancellables = Set<AnyCancellable>()
     private var hover = NotchHoverController()
     private var notchAnchorX: CGFloat?
@@ -41,13 +43,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "● NOTCH"
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Abrir notch", action: #selector(toggleNotch), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Ajustes…", action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem(title: "Ver agentes ahora", action: #selector(refreshNow), keyEquivalent: ""))
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Salir", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        statusItem.menu = menu
+        buildMenu()
+        // El menú sigue al idioma.
+        NotchSettings.shared.$langCode
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.buildMenu() }
+            .store(in: &cancellables)
 
         NotchContext.shared.store = store
         store.onChange = { [weak self] fresh in
@@ -60,7 +61,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rebuildWindow()
         installOfficeHotKey()
         installHover()
-        installMenuHoverToggle()
 
         NotificationCenter.default.addObserver(
             self,
@@ -140,9 +140,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self,
                       self.doneGen[s.agent] == gen,
                       self.lastAgentStatus[s.agent] == .done else { return }
-                self.agentToast.show(session: s)
+                self.requestAgentToast(s)
             }
         }
+    }
+
+    /// Cola: el aviso de agente espera a que no haya otro aviso fuera
+    /// (el de música dura 4.5 s, el de agente 5 s): salen uno detrás de otro.
+    private func requestAgentToast(_ s: AgentSession) {
+        toastQueueGen += 1
+        pumpAgentToast(s, gen: toastQueueGen, attempt: 0)
+    }
+
+    private func pumpAgentToast(_ s: AgentSession, gen: Int, attempt: Int) {
+        guard gen == toastQueueGen, attempt < 12 else { return }
+        if toast.state.visible || agentToast.state.visible {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                self?.pumpAgentToast(s, gen: gen, attempt: attempt + 1)
+            }
+            return
+        }
+        agentToast.show(session: s)
     }
 
     private func hidePanel() {
@@ -153,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func refreshNow() {
         store.refresh()
         let n = store.active.count
-        statusItem.button?.title = n > 0 ? "● NOTCH (\(n))" : "○ NOTCH"
+        statusItem.button?.title = n > 0 ? tr("menu.statusOn", n) : tr("menu.statusOff")
     }
 
     @objc private func openSettings() {
@@ -214,6 +232,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.lights.setToastShowing($0) }
             .store(in: &cancellables)
+        // La música espera si el aviso de agente está fuera (y viceversa).
+        toast.isBlocked = { [weak self] in self?.agentToast.state.visible == true }
     }
 
     // MARK: - Hover: abrir al subir el ratón, cerrar al sacarlo
@@ -229,15 +249,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hover.start()
     }
 
+    /// Menú del icono (se reconstruye al cambiar el idioma).
+    private func buildMenu() {
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: tr("menu.open"), action: #selector(toggleNotch), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: tr("menu.settings"), action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: tr("menu.refresh"), action: #selector(refreshNow), keyEquivalent: ""))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: tr("menu.quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        statusItem.menu = menu
+        installMenuHoverToggle()
+        installOfficeHotKeyHint()
+    }
+
     private func installMenuHoverToggle() {
         let item = NSMenuItem(
-            title: "Abrir al pasar el ratón",
+            title: tr("menu.hover"),
             action: #selector(toggleHover),
             keyEquivalent: ""
         )
         item.state = hover.isEnabled ? .on : .off
         item.tag = 99
         statusItem.menu?.insertItem(item, at: 0)
+    }
+
+    private func installOfficeHotKeyHint() {
+        if OfficeHotKey.shared.isAvailable {
+            let item = NSMenuItem(title: tr("menu.hotkey"), action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            statusItem.menu?.insertItem(item, at: 0)
+        }
     }
 
     @objc private func toggleHover(_ sender: NSMenuItem) {
@@ -252,11 +293,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.toggleNotch()
         }
         OfficeHotKey.shared.install()
-        if OfficeHotKey.shared.isAvailable {
-            let item = NSMenuItem(title: "Notch: doble-tap ⌘ der. (activo)", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            statusItem.menu?.insertItem(item, at: 0)
-        }
     }
 }
 

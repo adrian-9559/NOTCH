@@ -31,7 +31,7 @@ final class ShelfStore: ObservableObject {
         for u in urls where !items.contains(where: { $0.url == u }) {
             items.append(ShelfItem(url: u))
         }
-        lastAction = urls.count == 1 ? "Añadido: \(urls[0].lastPathComponent)" : "Añadidos \(urls.count) archivos"
+        lastAction = urls.count == 1 ? tr("shelf.added", urls[0].lastPathComponent) : tr("shelf.addedN", urls.count)
     }
 
     func remove(_ item: ShelfItem) {
@@ -47,17 +47,17 @@ final class ShelfStore: ObservableObject {
         let n = items.count
         items.removeAll { $0.addedAt < cutoff }
         if items.count != n {
-            lastAction = "Retirados \(n - items.count) de ayer"
+            lastAction = tr("shelf.retiredN", n - items.count)
         }
     }
 
     /// Cuánto le queda en la estantería ("se borra en 5h").
     func remaining(_ item: ShelfItem) -> String {
         let left = item.addedAt.addingTimeInterval(Self.keepHours).timeIntervalSince(Date())
-        guard left > 0 else { return "retirando…" }
+        guard left > 0 else { return tr("shelf.retiring") }
         let h = Int(left) / 3600
-        if h > 0 { return "se borra en \(h)h" }
-        return "se borra en \(Int(left) / 60)m"
+        if h > 0 { return tr("shelf.expiryH", h) }
+        return tr("shelf.expiryM", max(1, Int(left) / 60))
     }
 
     // MARK: - Screenshots automáticos
@@ -124,7 +124,7 @@ final class ShelfStore: ObservableObject {
                 var item = ShelfItem(url: u)
                 item.autoScreenshot = true
                 if !items.contains(where: { $0.url == u }) { items.append(item) }
-                lastAction = "Screenshot: \(u.lastPathComponent)"
+                lastAction = tr("shelf.shot", u.lastPathComponent)
             }
         }
     }
@@ -137,10 +137,10 @@ final class ShelfStore: ObservableObject {
 
     func shareViaAirDrop(_ item: ShelfItem) {
         guard let svc = NSSharingService(named: .sendViaAirDrop) else {
-            lastAction = "AirDrop no disponible"; return
+            lastAction = tr("shelf.noAirdrop"); return
         }
         svc.perform(withItems: [item.url])
-        lastAction = "Compartiendo por AirDrop…"
+        lastAction = tr("shelf.sharing")
     }
 
     func compress(_ item: ShelfItem) {
@@ -151,9 +151,9 @@ final class ShelfStore: ObservableObject {
         do {
             try task.run(); task.waitUntilExit()
             if task.terminationStatus == 0 {
-                add(urls: [dst]); lastAction = "Comprimido: \(dst.lastPathComponent)"
-            } else { lastAction = "No se pudo comprimir" }
-        } catch { lastAction = "No se pudo comprimir" }
+                add(urls: [dst]); lastAction = tr("shelf.compressed", dst.lastPathComponent)
+            } else { lastAction = tr("shelf.noCompress") }
+        } catch { lastAction = tr("shelf.noCompress") }
     }
 
     func convertToJPG(_ item: ShelfItem) {
@@ -161,18 +161,18 @@ final class ShelfStore: ObservableObject {
               let tiff = img.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else {
-            lastAction = "JPG: formato no soportado"; return
+            lastAction = tr("shelf.badFormat", "JPG"); return
         }
         let dst = item.url.deletingPathExtension().appendingPathExtension("jpg")
         do {
             try jpg.write(to: dst)
-            add(urls: [dst]); lastAction = "JPG: \(dst.lastPathComponent)"
-        } catch { lastAction = "No se pudo crear el JPG" }
+            add(urls: [dst]); lastAction = tr("shelf.jpg", dst.lastPathComponent)
+        } catch { lastAction = tr("shelf.noCreate", "JPG") }
     }
 
     func convertToPDF(_ item: ShelfItem) {
         guard let img = NSImage(contentsOf: item.url) else {
-            lastAction = "PDF: formato no soportado"; return
+            lastAction = tr("shelf.badFormat", "PDF"); return
         }
         // Una página con la imagen encajada.
         let page = NSRect(x: 0, y: 0, width: 595, height: 842) // A4 @72dpi
@@ -180,7 +180,7 @@ final class ShelfStore: ObservableObject {
         var mediaBox = page
         guard let consumer = CGDataConsumer(data: pdf as CFMutableData),
               let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
-            lastAction = "No se pudo crear el PDF"; return
+            lastAction = tr("shelf.noCreate", "PDF"); return
         }
         ctx.beginPDFPage(nil)
         NSGraphicsContext.saveGraphicsState()
@@ -196,7 +196,7 @@ final class ShelfStore: ObservableObject {
         do {
             try (pdf as Data).write(to: dst)
             add(urls: [dst]); lastAction = "PDF: \(dst.lastPathComponent)"
-        } catch { lastAction = "No se pudo crear el PDF" }
+        } catch { lastAction = tr("shelf.noCreate", "PDF") }
     }
 
     // MARK: - "To agent": entregar a la sesión elegida
@@ -204,14 +204,14 @@ final class ShelfStore: ObservableObject {
     func sendToAgent(_ item: ShelfItem, session: AgentSession) {
         let ok = HandoffService.deliver(path: item.url.path, to: session)
         if ok {
-            lastAction = "Entregado a \(session.agent.displayName)"
+            lastAction = tr("shelf.delivered", session.agent.displayName)
         } else {
             // Fallback: path en portapapeles + ventana al frente, pulsa ⌘V.
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(item.url.path, forType: .string)
             ReplyService.shared.focus(session: session)
-            lastAction = "Path copiado — pulsa ⌘V en \(session.agent.displayName)"
+            lastAction = tr("shelf.pathHint", session.agent.displayName)
         }
     }
 }
@@ -301,6 +301,7 @@ struct ShelfBuddy: View {
 struct ShelfView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject var shelf: ShelfStore
+    @ObservedObject private var settings = NotchSettings.shared
     @State private var isTargeted = false
 
     var body: some View {
@@ -310,9 +311,9 @@ struct ShelfView: View {
                 Spacer()
                 HStack(spacing: 4) {
                     Image(systemName: "tray").font(.system(size: 10)).foregroundStyle(.secondary)
-                    Text("kept for a day").font(.notchMono(10)).foregroundStyle(.secondary)
+                    Text(tr("shelf.kept")).font(.notchMono(10)).foregroundStyle(.secondary)
                 }
-                .help("Lo que lleva 24 h se retira solo (el original no se toca)")
+                .help(tr("shelf.kept"))
             }
             HStack(alignment: .bottom, spacing: 10) {
                 ShelfBuddy()
@@ -320,10 +321,10 @@ struct ShelfView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Image(systemName: "basket").font(.system(size: 13)).foregroundStyle(Color(hex: "2F9E6E"))
-                        Text("Arrastra un archivo al notch")
+                        Text(tr("shelf.drop"))
                             .font(.notchMono(12)).foregroundStyle(.white)
                     }
-                    Text("AirDrop, comprimir, a JPG — o consérvalo hasta mañana.")
+                    Text(tr("shelf.dropSub"))
                         .font(.caption).foregroundStyle(Color.white.opacity(0.45))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -401,7 +402,7 @@ private struct ShelfRow: View {
                     Text(shelf.remaining(item)).font(.caption2).foregroundStyle(.secondary)
                 }
                 HStack(spacing: 4) {
-                    Button("AirDrop") { shelf.shareViaAirDrop(item) }
+                    Button(tr("shelf.airdrop")) { shelf.shareViaAirDrop(item) }
                     Button("Zip") { shelf.compress(item) }
                     Button("JPG") { shelf.convertToJPG(item) }
                     Button("PDF") { shelf.convertToPDF(item) }
@@ -409,16 +410,16 @@ private struct ShelfRow: View {
                 .controlSize(.mini)
                 .buttonStyle(.bordered)
                 HStack(spacing: 4) {
-                    Button("Ver") { shelf.reveal(item) }
-                    Button("Path") {
+                    Button(tr("shelf.view")) { shelf.reveal(item) }
+                    Button(tr("shelf.path")) {
                         let pb = NSPasteboard.general
                         pb.clearContents()
                         pb.setString(item.url.path, forType: .string)
-                        shelf.lastAction = "Path copiado"
+                        shelf.lastAction = tr("shelf.pathCopied")
                     }
-                    Button("Borrar") { shelf.remove(item) }
+                    Button(tr("shelf.delete")) { shelf.remove(item) }
                     if !live.isEmpty {
-                        Menu("To agent") {
+                        Menu(tr("shelf.toAgent")) {
                             ForEach(live, id: \.agent) { s in
                                 Button(s.agent.displayName) { shelf.sendToAgent(item, session: s) }
                             }

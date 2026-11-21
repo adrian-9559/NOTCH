@@ -108,9 +108,9 @@ struct ActivityView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("", selection: $range) {
-                Text("Día").tag(0)
-                Text("Semana").tag(1)
-                Text("Mes").tag(2)
+                Text(tr("act.day")).tag(0)
+                Text(tr("act.week")).tag(1)
+                Text(tr("act.month")).tag(2)
             }
             .pickerStyle(.segmented)
             .controlSize(.small)
@@ -121,7 +121,7 @@ struct ActivityView: View {
                 Text(formatActive(total))
                     .font(.notchMono(22))
                     .foregroundStyle(.white)
-                Text(range == 0 ? "hoy" : range == 1 ? "7 días" : "30 días")
+                Text(range == 0 ? tr("act.today") : range == 1 ? tr("act.days7") : tr("act.days30"))
                     .font(.notchMono(11))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -129,15 +129,15 @@ struct ActivityView: View {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 10))
                         .foregroundStyle(.orange)
-                    Text("racha \(store.currentStreak())d")
+                    Text(tr("act.streak", store.currentStreak()))
                         .font(.notchMono(11))
                         .foregroundStyle(.white.opacity(0.85))
                 }
-                .help("Días seguidos con actividad (mejor: \(store.bestStreak())d)")
+                .help(tr("act.best", store.bestStreak()))
             }
 
             if rows.isEmpty {
-                Text("Sin actividad en este periodo")
+                Text(tr("act.empty"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -181,7 +181,7 @@ struct ActivityView: View {
                     }
                     Spacer()
                     if let best = week.max(by: { $0.seconds < $1.seconds }), best.seconds > 0 {
-                        Text("mejor \(dayLabel(best.day)) · \(formatActive(best.seconds))")
+                        Text(tr("act.bestDay", dayLabel(best.day), formatActive(best.seconds)))
                             .font(.notchMono(9))
                             .foregroundStyle(.secondary)
                     }
@@ -195,8 +195,8 @@ struct ActivityView: View {
 
     private func dayLabel(_ d: Date) -> String {
         let cal = Calendar.current
-        if cal.isDateInToday(d) { return "hoy" }
-        if cal.isDateInYesterday(d) { return "ayer" }
+        if cal.isDateInToday(d) { return tr("act.today") }
+        if cal.isDateInYesterday(d) { return tr("act.yesterday") }
         let f = DateFormatter(); f.locale = .current; f.dateFormat = "EEE"
         return f.string(from: d)
     }

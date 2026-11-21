@@ -76,12 +76,13 @@ final class HistoryStore: ObservableObject {
 
 struct HistoryView: View {
     @ObservedObject var store = HistoryStore.shared
+    @ObservedObject private var settings = NotchSettings.shared
     @State private var dayOffset = 0 // 0 hoy, -1 ayer… -6 semana
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(dayOffset == 0 ? "hoy" : dayName).font(.notchMono(11)).foregroundStyle(.secondary)
+                Text(dayOffset == 0 ? tr("hist.today") : dayName).font(.notchMono(11)).foregroundStyle(.secondary)
                 Spacer()
                 Button("‹") { dayOffset = max(-6, dayOffset - 1) }.controlSize(.small)
                 Button("›") { dayOffset = min(0, dayOffset + 1) }.controlSize(.small)
@@ -89,7 +90,7 @@ struct HistoryView: View {
             .buttonStyle(.bordered)
             let rows = store.hours(for: day)
             if rows.allSatisfy({ $0.count == 0 }) {
-                Text("Sin actividad registrada").font(.caption).foregroundStyle(.secondary)
+                Text(tr("hist.empty")).font(.caption).foregroundStyle(.secondary)
             } else {
                 ForEach(rows.filter { $0.count > 0 }, id: \.hour) { r in
                     HStack(spacing: 6) {

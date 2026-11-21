@@ -56,6 +56,7 @@ struct SettingsModalView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     colorSection
+                    languageSection
                     navbarSection
                     behaviorSection
                     privacySection
@@ -80,10 +81,10 @@ struct SettingsModalView: View {
                     .foregroundStyle(settings.accent)
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text("ajustes de notch")
+                Text(tr("set.title"))
                     .font(.notchMono(13))
                     .foregroundStyle(.white)
-                Text("todo se aplica al instante")
+                Text(tr("set.subtitle"))
                     .font(.notchMono(9))
                     .foregroundStyle(Color.white.opacity(0.4))
             }
@@ -104,7 +105,7 @@ struct SettingsModalView: View {
     // MARK: - Color
 
     private var colorSection: some View {
-        SettingsSection(title: "color", icon: "paintpalette.fill") {
+        SettingsSection(title: tr("set.color"), icon: "paintpalette.fill") {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     ForEach(Self.palette, id: \.self) { hex in
@@ -136,7 +137,7 @@ struct SettingsModalView: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("opacidad del panel")
+                        Text(tr("set.opacity"))
                             .font(.notchMono(10))
                             .foregroundStyle(Color.white.opacity(0.6))
                         Spacer()
@@ -155,48 +156,48 @@ struct SettingsModalView: View {
     // MARK: - Navbar
 
     private var navbarSection: some View {
-        SettingsSection(title: "navbar", icon: "menubar.rectangle", badge: "\(settings.visibleOrder.count)") {
+        SettingsSection(title: tr("set.navbar"), icon: "menubar.rectangle", badge: "\(settings.visibleOrder.count)") {
             VStack(spacing: 6) {
-                ForEach(settings.tabOrder, id: \.self) { title in
+                ForEach(settings.tabOrder, id: \.self) { id in
                     HStack(spacing: 8) {
-                        Image(systemName: iconName(for: title))
+                        Image(systemName: NotchTab(rawValue: id)?.icon ?? "gearshape")
                             .font(.system(size: 11))
                             .frame(width: 18)
                             .foregroundStyle(
-                                settings.hiddenTabs.contains(title)
+                                settings.hiddenTabs.contains(id)
                                     ? Color.white.opacity(0.3)
                                     : settings.accent
                             )
-                        Text(title)
+                        Text(NotchTab(rawValue: id)?.title ?? id)
                             .font(.system(size: 12))
                             .foregroundStyle(
-                                settings.hiddenTabs.contains(title)
+                                settings.hiddenTabs.contains(id)
                                     ? Color.white.opacity(0.35)
                                     : Color.white.opacity(0.85)
                             )
-                            .strikethrough(settings.hiddenTabs.contains(title))
+                            .strikethrough(settings.hiddenTabs.contains(id))
                         Spacer()
                         Button {
-                            settings.move(title, by: -1)
+                            settings.move(id, by: -1)
                         } label: {
                             Image(systemName: "chevron.up")
                                 .font(.system(size: 9, weight: .bold))
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.white.opacity(0.5))
-                        .disabled(settings.tabOrder.first == title)
+                        .disabled(settings.tabOrder.first == id)
                         Button {
-                            settings.move(title, by: 1)
+                            settings.move(id, by: 1)
                         } label: {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 9, weight: .bold))
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.white.opacity(0.5))
-                        .disabled(settings.tabOrder.last == title)
+                        .disabled(settings.tabOrder.last == id)
                         Toggle("", isOn: Binding(
-                            get: { !settings.hiddenTabs.contains(title) },
-                            set: { settings.setVisible(title, $0) }
+                            get: { !settings.hiddenTabs.contains(id) },
+                            set: { settings.setVisible(id, $0) }
                         ))
                         .toggleStyle(.switch)
                         .controlSize(.mini)
@@ -217,19 +218,19 @@ struct SettingsModalView: View {
     // MARK: - Comportamiento
 
     private var behaviorSection: some View {
-        SettingsSection(title: "comportamiento", icon: "slider.horizontal.3") {
+        SettingsSection(title: tr("set.behavior"), icon: "slider.horizontal.3") {
             VStack(alignment: .leading, spacing: 4) {
                 SettingsToggleRow(
-                    label: "Abrir al pasar el ratón por el notch",
-                    subtitle: "El panel se abre solo al subir el ratón",
+                    label: tr("set.hover"),
+                    subtitle: tr("set.hoverSub"),
                     isOn: $hoverOpen,
                     accent: settings.accent
                 ) {
                     UserDefaults.standard.set(hoverOpen, forKey: "notchHoverOpen")
                 }
                 SettingsToggleRow(
-                    label: "Auto-send en Claude (Accessibility)",
-                    subtitle: "Envía el reply con Enter, sin ⌘V",
+                    label: tr("set.autosend"),
+                    subtitle: tr("set.autosendSub"),
                     isOn: $autoSend,
                     accent: settings.accent
                 ) {
@@ -239,26 +240,26 @@ struct SettingsModalView: View {
                     ReplyService.shared.autoSendEnabled = autoSend
                     trustState = ReplyService.shared.isTrusted
                 }
-                Text(trustState ? "Accesibilidad: concedida ✓" : "Accesibilidad: pendiente (solo si activas auto-send)")
+                Text(trustState ? tr("set.trustOk") : tr("set.trustPending"))
                     .font(.notchMono(9))
                     .foregroundStyle(Color.white.opacity(0.45))
                 SettingsToggleRow(
-                    label: "Aviso al cambiar de canción",
-                    subtitle: "Píldora con carátula al sonar otra",
+                    label: tr("set.songToast"),
+                    subtitle: tr("set.songToastSub"),
                     isOn: $settings.songToastEnabled,
                     accent: settings.accent
                 ) {}
                 SettingsToggleRow(
-                    label: "Aviso al terminar un agente",
-                    subtitle: "Píldora cuando acaba de verdad",
+                    label: tr("set.agentToast"),
+                    subtitle: tr("set.agentToastSub"),
                     isOn: $settings.agentToastEnabled,
                     accent: settings.accent
                 ) {}
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Obsidian vault (dev log)")
+                    Text(tr("set.vault"))
                         .font(.notchMono(10))
                         .foregroundStyle(Color.white.opacity(0.6))
-                    TextField("ruta del vault…", text: $vaultPath, onCommit: {
+                    TextField(tr("set.vaultPh"), text: $vaultPath, onCommit: {
                         UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
                     })
                     .textFieldStyle(.roundedBorder).font(.caption)
@@ -271,16 +272,38 @@ struct SettingsModalView: View {
     // MARK: - Privacidad
 
     private var privacySection: some View {
-        SettingsSection(title: "privacidad", icon: "lock.fill") {
+        SettingsSection(title: tr("set.privacy"), icon: "lock.fill") {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Todo queda en tu Mac. Sin cuentas, sin tracking, sin Screen Recording. El historial vive en ~/Library/Application Support/NOTCH.")
+                Text(tr("set.privacyBody"))
                     .font(.system(size: 11))
                     .foregroundStyle(Color.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
-                Text("NOTCH · 100% local")
+                Text(tr("set.local"))
                     .font(.notchMono(9))
                     .foregroundStyle(Color.white.opacity(0.35))
                     .frame(maxWidth: .infinity, alignment: .center)
+            }
+        }
+    }
+
+    // MARK: - Idioma
+
+    private var languageSection: some View {
+        SettingsSection(title: tr("set.language"), icon: "globe") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(tr("set.languageSub"))
+                    .font(.caption2)
+                    .foregroundStyle(Color.white.opacity(0.45))
+                HStack(spacing: 6) {
+                    ForEach(NotchLang.allCases, id: \.self) { lang in
+                        if settings.langCode == lang.rawValue {
+                            Button(lang.label) {}.controlSize(.small).buttonStyle(.borderedProminent).disabled(true)
+                        } else {
+                            Button(lang.label) { settings.langCode = lang.rawValue }
+                                .controlSize(.small).buttonStyle(.bordered)
+                        }
+                    }
+                }
             }
         }
     }

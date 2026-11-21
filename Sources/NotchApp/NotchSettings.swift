@@ -8,8 +8,9 @@ final class NotchSettings: ObservableObject {
     static let shared = NotchSettings()
 
     static let defaultAccent = "A550A7"
-    /// Pestañas que la navbar puede mostrar (orden por defecto).
-    static let tabTitles = ["Shelf", "Focus", "Mac", "Actividad", "Música", "Notas"]
+    /// IDs de pestaña que la navbar puede mostrar (orden por defecto).
+    /// Son IDs estables: el título visible sale de `NotchTab` (idioma).
+    static let tabTitles = ["shelf", "focus", "mac", "activity", "music", "notes"]
 
     /// Color de acento en hex (#RRGGBB).
     @Published var accentHex: String {
@@ -35,6 +36,10 @@ final class NotchSettings: ObservableObject {
     @Published var agentToastEnabled: Bool {
         didSet { save() }
     }
+    /// Idioma de NOTCH (es/en/fr/de).
+    @Published var langCode: String {
+        didSet { save() }
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -42,9 +47,10 @@ final class NotchSettings: ObservableObject {
         if hex.hasPrefix("#") { hex.removeFirst() }
         accentHex = hex
         panelOpacity = d.object(forKey: "notchPanelOpacity") as? Double ?? 0.82
-        // Normaliza: solo títulos conocidos, sin duplicados; los que falten
-        // (títulos nuevos de una versión posterior) se añaden al final.
+        // Normaliza: migra títulos antiguos (español) a IDs, solo títulos
+        // conocidos, sin duplicados; los que falten se añaden al final.
         var order = (d.stringArray(forKey: "notchTabOrder") ?? [])
+            .map { legacyTabs[$0] ?? $0 }
             .filter { Self.tabTitles.contains($0) }
         var seen = Set<String>()
         order = order.filter { seen.insert($0).inserted }
@@ -53,11 +59,13 @@ final class NotchSettings: ObservableObject {
         }
         tabOrder = order
         hiddenTabs = (d.stringArray(forKey: "notchHiddenTabs") ?? [])
+            .map { legacyTabs[$0] ?? $0 }
             .filter { Self.tabTitles.contains($0) }
         songToastEnabled = d.object(forKey: "notchSongToast") as? Bool ?? true
         agentToastEnabled = d.object(forKey: "notchAgentToast") as? Bool ?? true
+        langCode = d.string(forKey: "notchLang") ?? NotchLang.system().rawValue
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
-        fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder)\n", stderr)
+        fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
     }
 
     var accent: Color { Color(hex: accentHex) }
@@ -93,6 +101,7 @@ final class NotchSettings: ObservableObject {
         d.set(hiddenTabs, forKey: "notchHiddenTabs")
         d.set(songToastEnabled, forKey: "notchSongToast")
         d.set(agentToastEnabled, forKey: "notchAgentToast")
+        d.set(langCode, forKey: "notchLang")
     }
 }
 #endif

@@ -163,6 +163,9 @@ final class MusicToastController {
     private var panels: [NSPanel] = []
     /// Para no pisar el panel principal cuando está abierto.
     var isPanelVisible: (() -> Bool)?
+    /// Para no pisar el aviso de agente: si está fuera, reintenta.
+    var isBlocked: (() -> Bool)?
+    private var retryGen = 0
 
     init() {
         NotificationCenter.default.addObserver(
@@ -187,6 +190,23 @@ final class MusicToastController {
     @objc private func trackChanged() {
         guard NotchSettings.shared.songToastEnabled else { return }
         guard isPanelVisible?() != true else { return }
+        retryGen += 1
+        let gen = retryGen
+        announceWhenFree(gen: gen, attempt: 0)
+    }
+
+    /// Si el aviso de agente está fuera, espera (máx. 3 reintentos).
+    private func announceWhenFree(gen: Int, attempt: Int) {
+        guard gen == retryGen, attempt < 3 else {
+            if gen == retryGen { state.announce() }
+            return
+        }
+        if isBlocked?() == true {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                self?.announceWhenFree(gen: gen, attempt: attempt + 1)
+            }
+            return
+        }
         state.announce()
     }
 

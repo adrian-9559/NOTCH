@@ -119,7 +119,7 @@ final class AgentToastState: ObservableObject {
 }
 
 /// Una ventana de aviso por pantalla con notch, siempre click-through.
-/// Vive un poco más abajo que el aviso de música para no pisarlo.
+/// Misma posición que el aviso de música: salen de uno en uno (cola).
 final class AgentToastController {
     let state = AgentToastState()
     private var panels: [NSPanel] = []
@@ -132,7 +132,7 @@ final class AgentToastController {
         for entry in notches where entry.layout.hasNotch {
             let n = entry.layout.notchRect
             let w: CGFloat = 340, h: CGFloat = 64
-            let frame = NSRect(x: n.midX - w / 2, y: n.minY - h - 10 - 72, width: w, height: h)
+            let frame = NSRect(x: n.midX - w / 2, y: n.minY - h - 10, width: w, height: h)
             fputs("NOTCH-AGENTTOAST frame=\(frame)\n", stderr)
             panels.append(makePanel(frame: frame))
         }
@@ -147,8 +147,8 @@ final class AgentToastController {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         if detail.hasPrefix(home) { detail = "~" + detail.dropFirst(home.count) }
         state.announce(
-            title: "\(session.agent.displayName) ha terminado",
-            subtitle: detail.isEmpty ? "tarea completada" : detail,
+            title: tr("toast.done", session.agent.displayName),
+            subtitle: detail.isEmpty ? tr("toast.taskDone") : detail,
             colorHex: session.agent.notchColorHex
         )
     }
