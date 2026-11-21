@@ -20,15 +20,18 @@ enum MiniTabs {
             guard let store = NotchContext.shared.store else { return [] }
             let ctx = NotchContext.shared
             return [
-                (title: "Shelf", view: AnyView(ShelfView(store: store, shelf: ctx.shelf))),
-                (title: "Focus", view: AnyView(VStack(spacing: 0) {
+                (title: NotchTab.shelf.rawValue, view: AnyView(ShelfView(store: store, shelf: ctx.shelf))),
+                (title: NotchTab.focus.rawValue, view: AnyView(HStack(alignment: .top, spacing: 12) {
                     TimerView(store: ctx.focusTimer)
-                    Divider()
+                        .frame(maxWidth: .infinity)
+                    Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1)
                     AwakeView(store: ctx.awake, sessions: store)
-                })),                (title: "Mac", view: AnyView(StatsView(sessions: store))),
-                (title: "Actividad", view: AnyView(ActivityView())),
-                (title: "Música", view: AnyView(MusicView(store: ctx.music))),
-                (title: "Notas", view: AnyView(VStack(spacing: 0) {
+                        .frame(maxWidth: .infinity)
+                })),
+                (title: NotchTab.mac.rawValue, view: AnyView(StatsView(sessions: store))),
+                (title: NotchTab.activity.rawValue, view: AnyView(ActivityView())),
+                (title: NotchTab.music.rawValue, view: AnyView(MusicView(store: ctx.music))),
+                (title: NotchTab.notes.rawValue, view: AnyView(VStack(spacing: 0) {
                     QuickNoteView(store: ctx.quickNote)
                     Divider()
                     HistoryView()

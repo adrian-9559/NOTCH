@@ -21,7 +21,7 @@ final class FocusTimerStore: ObservableObject {
             self.remaining -= 1
             if self.remaining <= 0 {
                 self.stop()
-                self.finishedMessage = "Hora de descansar la vista 👀"
+                self.finishedMessage = tr("focus.rest")
                 NSSound.beep()
             }
         }
@@ -46,28 +46,29 @@ final class FocusTimerStore: ObservableObject {
 
 struct TimerView: View {
     @ObservedObject var store: FocusTimerStore
+    @ObservedObject private var settings = NotchSettings.shared
     var body: some View {
         VStack(spacing: 6) {
-            Text("timer").font(.notchMono(11)).foregroundStyle(.secondary)
+            Text(tr("focus.timer")).font(.notchMono(11)).foregroundStyle(.secondary)
             ZStack {
                 ProgressView(value: store.progress)
                     .progressViewStyle(.circular)
-                    .scaleEffect(2.2)
-                    .padding(14)
-                Text(store.running ? store.label : "\(store.minutes) min")
-                    .font(.notchMono(16))
+                    .scaleEffect(1.7)
+                    .padding(10)
+                Text(store.running ? store.label : tr("focus.min", store.minutes))
+                    .font(.notchMono(14))
             }
-            Stepper("Minutos: \(store.minutes)", value: $store.minutes, in: 1...180, step: 5)
+            Stepper(tr("focus.minutes", store.minutes), value: $store.minutes, in: 1...180, step: 5)
                 .font(.caption).disabled(store.running)
             HStack {
                 ForEach([5, 20, 25, 50], id: \.self) { m in
-                    Button("\(m)'") { store.minutes = m }.controlSize(.small)
+                    Button("\(m)'") { store.minutes = m }.controlSize(.mini)
                 }
                 Spacer()
                 if store.running {
-                    Button("Parar") { store.stop() }.controlSize(.small)
+                    Button(tr("focus.stop")) { store.stop() }.controlSize(.small)
                 } else {
-                    Button("Empezar") { store.start() }.controlSize(.small).buttonStyle(.borderedProminent)
+                    Button(tr("focus.start")) { store.start() }.controlSize(.small).buttonStyle(.borderedProminent)
                 }
             }
             .buttonStyle(.bordered)
@@ -107,6 +108,18 @@ final class AwakeStore: ObservableObject {
         ("forever", "∞", 0),
         ("auto", "Auto", 0),
     ]
+    /// Minutos del relojito ajustable (modo personalizado).
+    @Published var customMinutes = 60
+
+    /// Progreso 0…1 de la cuenta atrás (nil si no hay cuenta: ∞/auto/off).
+    var progress: Double? {
+        guard let end = endAt, mode == "custom" || timedKeys.contains(mode) else { return nil }
+        let total = Double((mode == "custom" ? customMinutes * 60 : Self.durations.first { $0.key == mode }?.seconds) ?? 0)
+        guard total > 0 else { return nil }
+        return max(0, min(1, end.timeIntervalSince(Date()) / total))
+    }
+
+    private var timedKeys: [String] { ["30m", "1h", "2h", "4h"] }
 
     func set(_ newMode: String, store: SessionStore? = nil) {
         stop()
@@ -115,6 +128,8 @@ final class AwakeStore: ObservableObject {
         case "30m", "1h", "2h", "4h":
             let secs = Self.durations.first { $0.key == newMode }?.seconds ?? 0
             start(seconds: secs)
+        case "custom":
+            start(seconds: customMinutes * 60)
         case "forever":
             start(seconds: 0)
         case "auto":
@@ -181,7 +196,7 @@ final class AwakeStore: ObservableObject {
             }
             tickCountdown()
         } else {
-            remainingStr = mode == "auto" ? "auto" : "sin fin"
+            remainingStr = mode == "auto" ? tr("focus.auto") : tr("focus.forever")
         }
     }
 
@@ -215,40 +230,97 @@ final class AwakeStore: ObservableObject {
 
 struct AwakeView: View {
     @ObservedObject var store: AwakeStore
+    @ObservedObject private var settings = NotchSettings.shared
     var sessions: SessionStore?
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("keep awake").font(.notchMono(11)).foregroundStyle(.secondary)
+            Text(tr("focus.awake")).font(.notchMono(11)).foregroundStyle(.secondary)
+            HStack(alignment: .center, spacing: 10) {
+                // Relojito: progreso de la cuenta atrás + tiempo restante.
+                ZStack {
+                    if let p = store.progress {
+                        ProgressView(value: p)
+                            .progressViewStyle(.circular)
+                            .scaleEffect(1.4)
+                    } else {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .scaleEffect(1.1)
+                            .opacity(store.active ? 1 : 0.35)
+                    }
+                    Text(clockLabel)
+                        .font(.notchMono(9))
+                        .monospacedDigit()
+                }
+                .frame(width: 52, height: 52)
+                VStack(alignment: .leading, spacing: 4) {
+                    // Tiempo ajustable del relojito.
+                    Stepper(tr("focus.min", store.customMinutes), value: $store.customMinutes, in: 15...720, step: 15)
+                        .font(.caption)
+                        .onChange(of: store.customMinutes) { _ in
+                            if store.mode == "custom" { store.set("custom", store: sessions) }
+                        }
+                    HStack(spacing: 4) {
+                        ForEach(["30m", "1h", "2h", "4h"], id: \.self) { key in
+                            chipButton(key, label: key)
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        chipButton("forever", label: "∞")
+                        chipButton("auto", label: tr("focus.auto"))
+                        if store.mode == "off" {
+                            Button("Go") { store.set("custom", store: sessions) }
+                                .controlSize(.mini).buttonStyle(.borderedProminent)
+                        } else {
+                            Button(tr("focus.off")) { store.set("off", store: sessions) }
+                                .controlSize(.mini).buttonStyle(.bordered)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
             // Qué evitar (a libre elección).
             HStack(spacing: 12) {
-                Toggle("Pantalla", isOn: $store.preventDisplay).controlSize(.mini)
+                Toggle(tr("focus.screen"), isOn: $store.preventDisplay).controlSize(.mini)
                     .onChange(of: store.preventDisplay) { _ in restart() }
-                Toggle("Salvapantallas", isOn: $store.preventScreensaver).controlSize(.mini)
+                Toggle(tr("focus.screensaver"), isOn: $store.preventScreensaver).controlSize(.mini)
                     .onChange(of: store.preventScreensaver) { _ in restart() }
             }
             .font(.caption)
             .toggleStyle(.switch)
-            // Duración: 30m, 1h, 2h, 4h, sin fin o Auto.
-            HStack(spacing: 4) {
-                ForEach(AwakeStore.durations, id: \.key) { d in
-                    if store.mode == d.key {
-                        Button(d.label) {}.controlSize(.small).buttonStyle(.borderedProminent).disabled(true)
-                    } else {
-                        Button(d.label) { store.set(d.key, store: sessions) }
-                            .controlSize(.small).buttonStyle(.bordered)
-                    }
-                }
-                Spacer()
-                if store.active {
-                    HStack(spacing: 3) {
-                        Circle().fill(Color.green).frame(width: 6, height: 6)
-                        Text(store.remainingStr.isEmpty ? "Despierto" : store.remainingStr)
-                            .font(.notchMono(10)).foregroundStyle(.green).monospacedDigit()
-                    }
+            if store.active {
+                HStack(spacing: 3) {
+                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                    Text(store.remainingStr.isEmpty ? tr("focus.awakeOn") : store.remainingStr)
+                        .font(.notchMono(10)).foregroundStyle(.green).monospacedDigit()
                 }
             }
         }
         .padding(8)
+    }
+
+    private var clockLabel: String {
+        switch store.mode {
+        case "forever": return "∞"
+        case "auto": return "A"
+        case "off": return "zZ"
+        default:
+            let parts = store.remainingStr.split(separator: ":").compactMap { Int($0) }
+            guard parts.count == 3 else { return "" }
+            if parts[0] > 0 { return "\(parts[0])h" }
+            return "\(parts[1])m"
+        }
+    }
+
+    private func chipButton(_ key: String, label: String) -> some View {
+        Group {
+            if store.mode == key {
+                Button(label) {}.controlSize(.mini).buttonStyle(.borderedProminent).disabled(true)
+            } else {
+                Button(label) { store.set(key, store: sessions) }
+                    .controlSize(.mini).buttonStyle(.bordered)
+            }
+        }
     }
 
     /// Cambiar qué se evita reinicia el modo actual con la nueva mezcla.
