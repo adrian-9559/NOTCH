@@ -463,20 +463,22 @@ struct StatsView: View {
             }
             HStack(alignment: .top, spacing: 0) {
                 // Carril CPU.
-                VStack(spacing: 5) {
-                    LumioRing(label: "CPU", value: "\(Int((snap.cpuUser + snap.cpuSys).rounded()))%",
-                              sub: "E \(eCores) · P \(pCores)", fraction: cpuFrac,
-                              color: severityColor(fraction: cpuFrac))
-                    Text(tr("mac.peak", Int(peakCpu.rounded())))
+                VStack(spacing: 6) {
+                    LaneGauge(value: "\(Int((snap.cpuUser + snap.cpuSys).rounded()))%",
+                              fraction: cpuFrac, color: severityColor(fraction: cpuFrac))
+                    Text("CPU").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
+                    Text("E \(eCores) · P \(pCores) · \(tr("mac.peak", Int(peakCpu.rounded())))")
                         .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
                 }
                 .frame(maxWidth: .infinity)
                 laneDivider
                 // Carril memoria.
-                VStack(spacing: 5) {
-                    LumioRing(label: "MEMORY", value: "\(Int((memFrac * 100).rounded()))%",
-                              sub: String(format: "%.1f of %.0f GB", snap.memUsedGB, snap.memTotalGB),
+                VStack(spacing: 6) {
+                    LaneGauge(value: "\(Int((memFrac * 100).rounded()))%",
                               fraction: memFrac, color: severityColor(fraction: memFrac))
+                    Text("MEMORY").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
+                    Text(String(format: "%.1f of %.0f GB", snap.memUsedGB, snap.memTotalGB))
+                        .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
                     HStack(spacing: 4) {
                         Circle().fill(pressureColor).frame(width: 6, height: 6)
                         Text("\(pressureWord) · swap \(String(format: "%.0f", snap.swapUsedGB)) GB")
@@ -714,36 +716,35 @@ struct StatsView: View {
     }
 }
 
-/// Anillo simple estilo Lumio: anillo a la izquierda y textos a la
-/// derecha (rótulo arriba, valor gigante, sub debajo).
-struct LumioRing: View {
-    var label: String
+/// Medidor centrado: anillo grueso con el valor dentro y brillo del
+/// color de carga. Para los carriles de CPU y memoria.
+struct LaneGauge: View {
     var value: String
-    var sub: String
     var fraction: Double
     var color: Color
 
     var body: some View {
-        HStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.13), lineWidth: 7)
-                    .frame(width: 72, height: 72)
-                Circle()
-                    .trim(from: 0, to: max(fraction, 0.015))
-                    .stroke(color, style: StrokeStyle(lineWidth: 7, lineCap: .round))
-                    .frame(width: 72, height: 72)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.snappy(duration: 0.55), value: fraction)
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
-                Text(value).font(.notchMono(17)).foregroundStyle(.white).monospacedDigit()
-                Text(sub).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.55)).lineLimit(1).minimumScaleFactor(0.8)
-            }
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.1), lineWidth: 10)
+                .frame(width: 92, height: 92)
+            Circle()
+                .trim(from: 0, to: max(fraction, 0.015))
+                .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                .frame(width: 92, height: 92)
+                .rotationEffect(.degrees(-90))
+                .shadow(color: color.opacity(0.45), radius: 8)
+                .animation(.snappy(duration: 0.55), value: fraction)
+            Text(value)
+                .font(.notchMono(19))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .minimumScaleFactor(0.8)
         }
+        .frame(width: 100, height: 100)
     }
 }
+
 
 // MARK: - Limpieza de datos temporales de agentes
 
