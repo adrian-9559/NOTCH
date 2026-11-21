@@ -34,6 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var toastQueueGen = 0
     private var cancellables = Set<AnyCancellable>()
     private var hover = NotchHoverController()
+    /// Poll del bocadillo de navbar (las tracking areas no llegan aquí).
+    private var navPoll: Timer?
     private var notchAnchorX: CGFloat?
     private var notchTopY: CGFloat?
     private var notchWidth: CGFloat?
@@ -61,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rebuildWindow()
         installOfficeHotKey()
         installHover()
+        installNavHover()
 
         NotificationCenter.default.addObserver(
             self,
@@ -253,6 +256,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hover.onEnter = { [weak self] in self?.showPanel() }
         hover.onLeave = { [weak self] in self?.hidePanel() }
         hover.start()
+    }
+
+    /// Bocadillo de navbar por polling (A): hit-test del ratón contra
+    /// los frames de las píldoras (coords de pantalla, como el ratón).
+    private func installNavHover() {
+        navPoll?.invalidate()
+        navPoll = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let store = NotchContext.shared.navHover
+            guard let win = self.windowController, win.isVisible else {
+                if store.tab != nil { store.tab = nil }
+                return
+            }
+            let m = NSEvent.mouseLocation
+            var hit: String?
+            if let win = self.windowController, win.isVisible {
+                // Frames SwiftUI (origen: esq. sup-izq del VStack, que
+                // coincide con la ventana) → coords de pantalla.
+                let f = win.frame
+                for (id, r) in store.frames {
+                    let pill = NSRect(x: f.minX + r.minX, y: f.maxY - r.maxY,
+                                      width: r.width, height: r.height)
+                    if pill.insetBy(dx: -4, dy: -6).contains(m) { hit = id; break }
+                }
+            }
+            if store.tab != hit {
+                store.tab = hit
+            }
+        }
     }
 
     /// Menú del icono (se reconstruye al cambiar el idioma).

@@ -2,6 +2,25 @@
 import NotchCore
 import SwiftUI
 
+/// Hover de la navbar por polling (A): las tracking areas de SwiftUI
+/// (`onHover`) no disparan en este panel, así que se sondea como la
+/// apertura por hover. Guarda frames (coords de ventana) y la pestaña
+/// bajo el ratón; NotchUI lo alimenta a 8 Hz.
+final class NavHoverStore: ObservableObject {
+    /// Frames de las píldoras en coords de ventana (origen abajo-izq).
+    @Published var frames: [String: CGRect] = [:]
+    /// ID de la pestaña bajo el ratón (bocadillo), nil si ninguna.
+    @Published var tab: String? = nil
+}
+
+/// Frames de píldoras para el hover por polling.
+private struct NavFramesKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
 /// Vista raíz del notch. Datos desde SessionStore; acciones inyectadas
 /// (Allow/Reply/Open las implementa ReplyService en su lote).
 /// `extraTabs` permite añadir Shelf/Mini sin tocar este archivo.
@@ -23,6 +42,8 @@ struct NotchRootView: View {
     var onOpen: (AgentSession) -> Void = { _ in }
     /// Pestaña seleccionada por ID (sobrevive a reordenar/ocultar).
     @State private var selectedTitle = "shelf"
+    /// Bocadillo por polling (las tracking areas no llegan aquí).
+    @ObservedObject private var navHover = NotchContext.shared.navHover
     /// Altura mostrada del área de contenido (se anima a mano: si se
     /// usara withAnimation, la ventana saltaría al final de golpe).
     @State private var shownHeight: CGFloat = 300
@@ -44,6 +65,37 @@ struct NotchRootView: View {
         return settings.visibleOrder.compactMap { title in
             byTitle[title].map { (title: title, view: $0) }
         }
+    }
+
+    /// Píldora de navbar con bocadillo propio al pasar el ratón (A):
+    /// el tooltip nativo no sale con el panel sin activar.
+    @ViewBuilder
+    private func navCell(_ i: Int, tabs: [(title: String, view: AnyView)], sel: Int) -> some View {
+        let tabId = NotchTab(rawValue: tabs[i].title)
+        NavButton(
+            title: tabId?.title ?? tabs[i].title,
+            icon: tabId?.icon ?? "gearshape",
+            selected: i == sel
+        ) {
+            withAnimation(.snappy(duration: 0.22)) {
+                selectedTitle = tabs[i].title
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if navHover.tab == tabs[i].title {
+                NavBubble(text: tabId?.title ?? tabs[i].title)
+            }
+        }
+        // Frame para el hover por polling (las tracking areas no llegan).
+        // .global comparte espacio con NSEvent.mouseLocation.
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: NavFramesKey.self,
+                    value: [tabs[i].title: geo.frame(in: .global)]
+                )
+            }
+        )
     }
 
     var body: some View {
@@ -83,25 +135,13 @@ struct NotchRootView: View {
                         // que las 6 primeras van a su izquierda y, si hay más
                         // de 6, el resto pasa a su derecha.
                         let split = min(6, tabs.count)
-                        let pill: (Int) -> NavButton = { i in
-                            let tabId = NotchTab(rawValue: tabs[i].title)
-                            return NavButton(
-                                title: tabId?.title ?? tabs[i].title,
-                                icon: tabId?.icon ?? "gearshape",
-                                selected: i == sel
-                            ) {
-                                withAnimation(.snappy(duration: 0.22)) {
-                                    selectedTitle = tabs[i].title
-                                }
-                            }
-                        }
                         HStack(spacing: 3) {
-                            ForEach(0..<split, id: \.self) { i in pill(i) }
+                            ForEach(0..<split, id: \.self) { i in navCell(i, tabs: tabs, sel: sel) }
                             // Un poco a la izquierda: aire respecto al notch.
                             .offset(x: -8)
                             Spacer(minLength: 0)
                             if split < tabs.count {
-                                ForEach(split..<tabs.count, id: \.self) { i in pill(i) }
+                                ForEach(split..<tabs.count, id: \.self) { i in navCell(i, tabs: tabs, sel: sel) }
                             }
                             Text(store.active.isEmpty ? tr("nav.idle") : "\(store.active.count) \(tr("nav.active"))")
                                 .font(.system(size: 12))
@@ -195,6 +235,8 @@ struct NotchRootView: View {
             .frame(width: 680)
             .background(panelGlass)
         }
+        .coordinateSpace(name: "notchPanel")
+        .onPreferenceChange(NavFramesKey.self) { NotchContext.shared.navHover.frames = $0 }
         // Como Lumio: vidrio oscuro siempre, de día y de noche.
         .environment(\.colorScheme, .dark)
     }
@@ -308,6 +350,32 @@ private struct WaitingCard: View {
                 replyText = path
             }
         }
+    }
+}
+
+/// Bocadillo con el nombre de la pestaña (bocadillo propio, A).
+/// Vidrio oscuro con filo de acento; cuelga bajo la píldora.
+private struct NavBubble: View {
+    var text: String
+    @ObservedObject private var settings = NotchSettings.shared
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(Color.white.opacity(0.92))
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.black.opacity(0.9))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(settings.accent.opacity(0.5), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
+            .offset(y: 30)
+            .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 

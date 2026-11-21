@@ -13,6 +13,8 @@ final class NotchContext {
     let quickNote = QuickNoteStore()
     let music = MusicStore()
     let tasks = TaskStore()
+    /// Hover de la navbar por polling (bocadillo), lo alimenta NotchUI.
+    let navHover = NavHoverStore()
 }
 
 enum MiniTabs {
