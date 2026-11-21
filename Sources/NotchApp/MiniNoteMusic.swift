@@ -155,7 +155,7 @@ struct MusicView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: store.playing ? "music.note" : "music.note.list")
+            Image(systemName: icon)
                 .font(.title2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.playing ? store.title : "Silencio")
@@ -168,8 +168,8 @@ struct MusicView: View {
             HStack(spacing: 2) {
                 ForEach(0..<12, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 1)
-                        .fill(store.playing ? .accentColor : .gray.opacity(0.4))
-                        .frame(width: 3, height: store.playing ? CGFloat(4 + ((i * 7 + wave) % 14)) : 4)
+                        .fill(waveColor)
+                        .frame(width: 3, height: waveHeight(i))
                 }
             }
         }
@@ -177,6 +177,14 @@ struct MusicView: View {
         .onAppear { store.poll() }
         .onReceive(timer) { _ in store.poll() }
         .onReceive(waveTimer) { _ in wave += 1 }
+    }
+
+    // Subexpresiones aparte: el type-checker de CI (Swift 6.1) no
+    // resuelve el body entero en un plazo razonable.
+    private var icon: String { store.playing ? "music.note" : "music.note.list" }
+    private var waveColor: Color { store.playing ? .accentColor : .gray.opacity(0.4) }
+    private func waveHeight(_ i: Int) -> CGFloat {
+        store.playing ? CGFloat(4 + ((i * 7 + wave) % 14)) : 4
     }
 }
 #endif
