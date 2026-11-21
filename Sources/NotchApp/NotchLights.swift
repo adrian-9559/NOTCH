@@ -92,9 +92,8 @@ struct NotchLightsView: View {
             style: .continuous
         )
         let edge = music.tint ?? .white
-        // Negra total por dentro y por arriba; el color solo vive abajo:
-        // el degradado es transparente arriba (su sangrado no tiñe) y el
-        // filo se enmascara a la mitad inferior.
+        // Fondo completamente negro: el color solo vive en el aura y la
+        // onda. Abajo, un filo sutil del color (arriba negro puro).
         let bottomFade = LinearGradient(
             stops: [
                 .init(color: .clear, location: 0),
@@ -104,21 +103,11 @@ struct NotchLightsView: View {
             startPoint: .top,
             endPoint: .bottom
         )
-        return ZStack {
-            shape.fill(Color.black)
-            shape.fill(
-                LinearGradient(
-                    colors: [.clear, edge.opacity(0.55)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+        return shape.fill(Color.black)
+            .overlay(
+                shape.stroke(edge.opacity(0.6), lineWidth: 1)
+                    .mask(bottomFade)
             )
-            .blur(radius: 7)
-        }
-        .overlay(
-            shape.stroke(edge.opacity(0.6), lineWidth: 1)
-                .mask(bottomFade)
-        )
     }
 
     private func fmt(_ seconds: Double) -> String {
