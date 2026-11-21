@@ -493,16 +493,16 @@ struct MusicView: View {
             Button { store.back() } label: {
                 Image(systemName: "backward.fill")
             }
-            .help("Anterior")
+            .help(tr("mus.prev"))
             Button { store.togglePlay() } label: {
                 Image(systemName: store.playing ? "pause.fill" : "play.fill")
                     .font(.system(size: 19, weight: .semibold))
             }
-            .help(store.playing ? "Pausa" : "Reproducir")
+            .help(store.playing ? tr("mus.pause") : tr("mus.play"))
             Button { store.next() } label: {
                 Image(systemName: "forward.fill")
             }
-            .help("Siguiente")
+            .help(tr("mus.next"))
         }
         .buttonStyle(.plain)
         .font(.system(size: 15, weight: .semibold))

@@ -397,7 +397,7 @@ struct StatsView: View {
                             .font(.notchMono(10)).foregroundStyle(.secondary).lineLimit(1)
                         Spacer()
                         if t.pid > 500 {
-                            Button("Terminar") { confirmStop(t) }
+                            Button(tr("mac.terminate")) { confirmStop(t) }
                                 .controlSize(.mini).buttonStyle(.bordered)
                         }
                     }

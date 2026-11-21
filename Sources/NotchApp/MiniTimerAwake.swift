@@ -143,7 +143,7 @@ struct TimerView: View {
         VStack(spacing: 8) {
             // Timer | Cronómetro, como Lumio.
             Picker("", selection: $store.stopwatch) {
-                Text("Timer").tag(false)
+                Text(tr("focus.timer").capitalized).tag(false)
                 Text(tr("focus.stopwatch")).tag(true)
             }
             .pickerStyle(.segmented)
@@ -398,7 +398,7 @@ struct AwakeView: View {
                         chipButton("forever", label: "∞")
                         chipButton("auto", label: tr("focus.auto"))
                         if store.mode == "off" {
-                            Button("Go") { store.set("custom", store: sessions) }
+                            Button(tr("focus.go")) { store.set("custom", store: sessions) }
                                 .controlSize(.mini).buttonStyle(.borderedProminent)
                         } else {
                             Button(tr("focus.off")) { store.set("off", store: sessions) }

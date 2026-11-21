@@ -111,7 +111,7 @@ struct NotchRootView: View {
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(Color.white.opacity(0.72))
-                            .help("Ajustes de NOTCH")
+                            .help(tr("set.title"))
                         }
                         .padding(.top, 12)
                         .padding(.bottom, 9)

@@ -307,7 +307,7 @@ struct ShelfView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("shelf").font(.notchMono(11)).foregroundStyle(.secondary)
+                Text(NotchTab.shelf.title).font(.notchMono(11)).foregroundStyle(.secondary)
                 Spacer()
                 HStack(spacing: 4) {
                     Image(systemName: "tray").font(.system(size: 10)).foregroundStyle(.secondary)
