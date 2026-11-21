@@ -2,7 +2,9 @@ name: ci
 on: [push, pull_request]
 jobs:
   build:
-    runs-on: macos-14
+    # macos-14 fue retirado por GitHub (2026-11-02): todo job que lo pide
+    # se cancela al instante con "configuration is not supported".
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: swift-actions/setup-swift@v2
