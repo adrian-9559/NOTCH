@@ -10,11 +10,35 @@ extension Notification.Name {
 /// Aviso estilo Lumio: al cambiar la canción sale del notch una píldora
 /// pequeña con la carátula, el título y el símbolo de reproducción.
 /// Se oculta sola a los pocos segundos. Solo luz, sin clics.
+/// Ecualizador vivo: cada barra oscila de forma continua con su propio
+/// periodo y fase (ease-in-out + repeatForever), como una salida suave
+/// de modal en vez de saltos discretos por timer.
+struct ToastEQ: View {
+    @State private var on = false
+    private let maxH: [CGFloat] = [9, 15, 11, 16]
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 2.5) {
+            ForEach(0..<4, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 3, height: on ? maxH[i] : 4)
+                    .animation(
+                        .easeInOut(duration: 0.55 + Double(i) * 0.16)
+                            .delay(Double(i) * 0.09)
+                            .repeatForever(autoreverses: true),
+                        value: on
+                    )
+            }
+        }
+        .frame(height: 16, alignment: .bottom)
+        .onAppear { on = true }
+    }
+}
+
 struct MusicToastView: View {
     @ObservedObject var state: MusicToastState
     @ObservedObject private var music = NotchContext.shared.music
-    @State private var eqTick = 0
-    private let eqTimer = Timer.publish(every: 0.45, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { geo in
@@ -27,7 +51,6 @@ struct MusicToastView: View {
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
         .animation(.snappy(duration: 0.35), value: state.visible)
-        .onReceive(eqTimer) { _ in eqTick += 1 }
     }
 
     private var pill: some View {
@@ -70,14 +93,7 @@ struct MusicToastView: View {
             Spacer(minLength: 4)
             // Símbolo de reproducción: ecualizador vivo si suena.
             if music.playing {
-                HStack(alignment: .bottom, spacing: 2.5) {
-                    ForEach(0..<4, id: \.self) { i in
-                        RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.white.opacity(0.9))
-                            .frame(width: 3, height: eqHeight(i))
-                    }
-                }
-                .frame(height: 16, alignment: .bottom)
+                ToastEQ()
             } else {
                 Image(systemName: "play.fill")
                     .font(.system(size: 13, weight: .semibold))
@@ -87,10 +103,6 @@ struct MusicToastView: View {
         .padding(.horizontal, 12)
         .frame(width: 340, height: 64)
         .background(toastGlass)
-    }
-
-    private func eqHeight(_ i: Int) -> CGFloat {
-        [7, 14, 10, 16, 6, 12][(i + eqTick) % 6]
     }
 
     private var toastGlass: some View {
