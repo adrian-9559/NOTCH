@@ -346,6 +346,7 @@ func iconName(for title: String) -> String {
     case "Shelf": return "tray"
     case "Focus": return "timer"
     case "Mac": return "cpu"
+    case "Actividad": return "chart.bar"
     case "Música": return "music.note"
     case "Notas": return "note.text"
     default: return "gearshape"

@@ -56,6 +56,9 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 - **Luz de canción**: mientras suena una canción, todo el panel se tiñe con
   el color dominante de su carátula (transición suave) y vuelve a su color
   normal al cerrar el reproductor.
+- **Aura con el notch cerrado**: aunque no abras el panel, el notch se
+  envuelve en un halo del color de la canción mientras suena; al pausar,
+  se apaga.
 
 ## Pestañas
 
@@ -65,6 +68,7 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 | Shelf | Arrastra archivos al panel: quedan en la estantería o caen directo en una sesión viva. Botones por archivo: **To agent** (lo entrega a la sesión que elijas), AirDrop, Zip, JPG, PDF. Las capturas de pantalla entran solas. El original nunca se modifica. |
 | Focus | **Timer** con anillo (avisa para descansar la vista) y **Keep awake** (30m/1h/2h o Auto mientras los agentes trabajan, salvo batería baja). |
 | Mac | **Relojes de uso** (CPU, memoria, batería) con ticks y arco de color de semáforo: verde tranquilo, ámbar ocupado, rojo saturado. Chips con la **carga media 1/5/15** y **qué agente está cargando tu Mac**. |
+| Actividad | **Tiempo por agente** (día / semana / mes) con barras por agente, minibarras de los últimos 7 días y **racha** de días seguidos con actividad. Todo sale del historial local. |
 | Música | Reproducción estilo Lumio: carátula con vinilo asomando, título, barra de progreso con tiempos y controles ⏮ ⏸ ⏭. **El panel se ilumina con el color de la canción** (extraído de la carátula). Music.app y Spotify. |
 | Notas | **Quick-note**: escribe y Enter. Se guarda en `~/NOTCH-notes/`, en tu daily note de Obsidian (configura el vault) o en Apple Notes. **Historial**: qué hizo cada agente, hora a hora, hoy y últimos 6 días. |
 | ⚙ | Es el botón de la derecha en la navbar (o `⌘,`): abre el **modal de Ajustes** — color y opacidad del panel, orden y visibilidad de las pestañas, comportamiento y privacidad. |

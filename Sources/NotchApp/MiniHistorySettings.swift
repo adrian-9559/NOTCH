@@ -3,6 +3,8 @@ import NotchCore
 import SwiftUI
 
 // MARK: - Historial: qué hizo cada agente, hora a hora. Día y semana.
+// (La retención es de 90 días: ver `HistoryStore.retentionDays`, la
+// pestaña Actividad calcula tiempos y rachas sobre esa ventana.)
 
 struct HistoryEvent: Codable {
     var ts: Date
@@ -48,17 +50,17 @@ final class HistoryStore: ObservableObject {
             }.joined(separator: "\n") + "\n"
             try? lines.write(to: logFile(), atomically: true, encoding: .utf8)
         }
-        // Ventana en memoria: última semana.
-        let weekAgo = Date().addingTimeInterval(-7 * 86400)
-        events = events.filter { $0.ts > weekAgo }
+        // Ventana en memoria: últimos `retentionDays` (Actividad: mes + rachas).
+        let cutoff = Date().addingTimeInterval(-Double(Self.retentionDays) * 86400)
+        events = events.filter { $0.ts > cutoff }
     }
 
     func load() {
         guard let data = try? Data(contentsOf: logFile()),
               !data.isEmpty else { return }
-        let weekAgo = Date().addingTimeInterval(-7 * 86400)
+        let cutoff = Date().addingTimeInterval(-Double(Self.retentionDays) * 86400)
         events = data.split(separator: UInt8(ascii: "\n")).compactMap { try? JSONDecoder().decode(HistoryEvent.self, from: Data($0)) }
-            .filter { $0.ts > weekAgo }
+            .filter { $0.ts > cutoff }
         for e in events { lastByAgent[e.agent] = e.status }
     }
 
