@@ -549,7 +549,7 @@ struct StatsView: View {
 
     private var battStateWord: String {
         if snap.battery == nil { return "" }
-        if (snap.battery ?? 0) >= 99 { return tr("mac.full") }
+        if (snap.battery ?? 0) >= 99 { return snap.onAC ? tr("mac.mains") : tr("mac.full") }
         return snap.onAC ? tr("mac.charging") : tr("mac.onBattery")
     }
 
@@ -677,6 +677,8 @@ struct StatsView: View {
     }
 
     private var battTimeText: String {
+        // Llena: no queda nada que llenar.
+        if (snap.battery ?? 0) >= 99 { return "0" }
         let m = snap.batt.minutesLeft
         guard m > 0, m < 60000 else { return "—" }
         let t = String(format: "%dh %02dm", m / 60, m % 60)
