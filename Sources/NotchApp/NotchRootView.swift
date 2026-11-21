@@ -95,6 +95,8 @@ struct NotchRootView: View {
                                     }
                                 }
                             }
+                            // Un poco a la izquierda: aire respecto al notch.
+                            .offset(x: -8)
                             Spacer(minLength: 0)
                             Text(store.active.isEmpty ? tr("nav.idle") : "\(store.active.count) \(tr("nav.active"))")
                                 .font(.system(size: 12))
