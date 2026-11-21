@@ -84,7 +84,8 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 | Actividad | **Tiempo por agente** (día / semana / mes) con barras por agente, minibarras de los últimos 7 días y **racha** de días seguidos con actividad. Todo sale del historial local. |
 | Música | Reproducción estilo Lumio: carátula con vinilo asomando, título, barra de progreso con tiempos y controles ⏮ ⏸ ⏭. **El panel se ilumina con el color de la canción** (extraído de la carátula). Music.app y Spotify. |
 | Notas | **Quick-note**: escribe y Enter. Se guarda en `~/NOTCH-notes/`, en tu daily note de Obsidian (configura el vault) o en Apple Notes. **Historial**: qué hizo cada agente, hora a hora, hoy y últimos 6 días. |
-| ⚙ | Es el botón de la derecha en la navbar (o `⌘,`): abre el **modal de Ajustes** — color y opacidad del panel, **idioma** (ES/EN/FR/DE), orden y visibilidad de las pestañas, comportamiento y privacidad. |
+| ⚙ | Es el botón de la derecha en la navbar (o `⌘,`): abre el **modal de Ajustes** — color y opacidad, **idioma** (ES/EN/FR/DE), pestañas, comportamiento (hover, auto-send, avisos con duración, auto-envío de tareas, login), **música** (fuente), **datos** (retención, tamaño, borrado) y privacidad. |
+| Tareas | **Cola de peticiones** estilo Notion: crea tareas con agente y prioridad, fíltralas, reordénalas y **envíalas** a tus agentes (manual o auto al crear). Insignia de abiertas en la navbar. |
 
 ## Privacidad
 
