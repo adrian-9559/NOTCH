@@ -79,25 +79,30 @@ struct NotchRootView: View {
                     // contenido debajo.
                     let sel = tabs.firstIndex { $0.title == selectedTitle } ?? 0
                     VStack(alignment: .leading, spacing: 0) {
-                        // Píldoras pequeñas arriba a la izquierda: el notch
-                        // físico tapa el centro del panel, así que toda la
-                        // fila (7 pestañas) cabe a su izquierda.
-                        HStack(spacing: 3) {
-                            ForEach(tabs.indices, id: \.self) { i in
-                                let tabId = NotchTab(rawValue: tabs[i].title)
-                                NavButton(
-                                    title: tabId?.title ?? tabs[i].title,
-                                    icon: tabId?.icon ?? "gearshape",
-                                    selected: i == sel
-                                ) {
-                                    withAnimation(.snappy(duration: 0.22)) {
-                                        selectedTitle = tabs[i].title
-                                    }
+                        // Píldoras pequeñas: el notch físico tapa el centro, así
+                        // que las 6 primeras van a su izquierda y, si hay más
+                        // de 6, el resto pasa a su derecha.
+                        let split = min(6, tabs.count)
+                        let pill: (Int) -> NavButton = { i in
+                            let tabId = NotchTab(rawValue: tabs[i].title)
+                            return NavButton(
+                                title: tabId?.title ?? tabs[i].title,
+                                icon: tabId?.icon ?? "gearshape",
+                                selected: i == sel
+                            ) {
+                                withAnimation(.snappy(duration: 0.22)) {
+                                    selectedTitle = tabs[i].title
                                 }
                             }
+                        }
+                        HStack(spacing: 3) {
+                            ForEach(0..<split, id: \.self) { i in pill(i) }
                             // Un poco a la izquierda: aire respecto al notch.
                             .offset(x: -8)
                             Spacer(minLength: 0)
+                            if split < tabs.count {
+                                ForEach(split..<tabs.count, id: \.self) { i in pill(i) }
+                            }
                             Text(store.active.isEmpty ? tr("nav.idle") : "\(store.active.count) \(tr("nav.active"))")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color.white.opacity(0.8))

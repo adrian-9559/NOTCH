@@ -134,7 +134,7 @@ struct SettingsModalView: View {
                                     .fill(page == p ? settings.accent.opacity(0.25) : Color.white.opacity(0.07))
                             )
                             .foregroundStyle(page == p ? settings.accent : Color.white.opacity(0.6))
-                        Text(tr(p.titleKey))
+                        Text(tr(p.titleKey).capitalized)
                             .font(.system(size: 12, weight: page == p ? .semibold : .regular))
                             .foregroundStyle(page == p ? .white : Color.white.opacity(0.7))
                         Spacer()
