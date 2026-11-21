@@ -24,6 +24,8 @@ struct BatteryDetails {
     var watts: Double = 0 // + cargando, - descargando
     var minutesLeft: Int = 0
     var charging: Bool = false
+    /// Tiempo estimado por capacidad/potencia (macOS da 0 al estar llena).
+    var estimated: Bool = false
 }
 
 struct AgentServer {
@@ -157,6 +159,8 @@ enum MacPanelReader {
     }
 
     /// Salud, ciclos, potencia, tiempo restante y estado de la batería.
+    /// Si macOS no da tiempo (0 al estar casi llena), se estima con la
+    /// capacidad restante y la potencia actual.
     static func readBattery() -> BatteryDetails {
         var b = BatteryDetails()
         guard let out = run("/usr/sbin/ioreg", ["-rn", "AppleSmartBattery"]) else { return b }
@@ -165,16 +169,31 @@ enum MacPanelReader {
             let digits = out[r].replacingOccurrences(of: "[^0-9-]", with: "", options: .regularExpression)
             return Double(digits)
         }
-        if let full = num1(#""FullChargeCapacity"=(\d+)"#),
-           let design = num1(#""DesignCapacity"=(\d+)"#), design > 0 {
+        let full = num1(#""FullChargeCapacity"=(\d+)"#) ?? 0
+        if let design = num1(#""DesignCapacity"=(\d+)"#), design > 0, full > 0 {
             b.healthPct = full / design * 100
+        } else {
+            b.healthPct = 0 // sin dato: se muestra "—"
         }
+        let remaining = num1(#""RemainingCapacity"=(\d+)"#) ?? 0
         b.cycles = Int(num1(#""CycleCount" = (\d+)"#) ?? 0)
         let amps = num1(#""Amperage" = (-?\d+)"#) ?? 0
         let volts = num1(#""Voltage" = (\d+)"#) ?? 0
         b.watts = amps * volts / 1_000_000
         b.minutesLeft = Int(num1(#""TimeRemaining" = (\d+)"#) ?? 0)
         b.charging = out.contains(#""IsCharging" = Yes"#)
+        // Estima cuando macOS no informa (0 o absurdo).
+        if (b.minutesLeft <= 0 || b.minutesLeft >= 60000), full > 0, remaining > 0, volts > 0 {
+            let rateMA = abs(b.watts) * 1_000_000 / volts
+            let deficit = b.charging ? max(0, full - remaining) : remaining
+            if rateMA > 50, deficit > 0 {
+                let mins = Int((deficit / rateMA * 60).rounded())
+                if mins > 0, mins < 24 * 60 {
+                    b.minutesLeft = mins
+                    b.estimated = true
+                }
+            }
+        }
         return b
     }
 
@@ -325,27 +344,7 @@ struct StatsView: View {
                 Spacer()
                 Text(chip).font(.notchMono(11)).foregroundStyle(.secondary)
             }
-            HStack(alignment: .top, spacing: 0) {
-                LumioRing(label: "CPU", value: "\(Int((snap.cpuUser + snap.cpuSys).rounded()))%",
-                          sub: "E \(eCores) · P \(pCores)", fraction: cpuFrac,
-                          color: severityColor(fraction: cpuFrac))
-                    .frame(maxWidth: .infinity)
-                LumioRing(label: "MEMORY", value: "\(Int((memFrac * 100).rounded()))%",
-                          sub: String(format: "%.1f of %.0f GB", snap.memUsedGB, snap.memTotalGB),
-                          fraction: memFrac, color: severityColor(fraction: memFrac))
-                    .frame(maxWidth: .infinity)
-                batteryCard.frame(maxWidth: .infinity, alignment: .leading)
-            }
-            // Presión de memoria + pico del último minuto.
-            VStack(alignment: .leading, spacing: 3) {
-                memoryBar
-                HStack {
-                    Text(tr("mac.lastMin", Int(peakCpu.rounded())))
-                    Spacer()
-                    Text("\(pressureWord) · swap \(String(format: "%.0f", snap.swapUsedGB)) GB")
-                }
-                .font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5))
-            }
+            measurementsCard
             // Qué carga el Mac (plegable).
             sectionHeader(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total", folded: $foldLoads)
             if !foldLoads {
@@ -441,6 +440,71 @@ struct StatsView: View {
     }
 
     // MARK: - piezas
+
+    /// Tarjeta unificada de mediciones: CPU, memoria y batería en tres
+    /// carriles con divisores, cada uno con su anillo. El pico y la
+    /// presión viven en su carril.
+    private var measurementsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                Circle().fill(Color(hex: "2F9E6E")).frame(width: 6, height: 6)
+                Text(tr("mac.measurements")).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
+                Spacer()
+                Text(chip).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.35))
+            }
+            HStack(alignment: .top, spacing: 0) {
+                // Carril CPU.
+                VStack(spacing: 5) {
+                    LumioRing(label: "CPU", value: "\(Int((snap.cpuUser + snap.cpuSys).rounded()))%",
+                              sub: "E \(eCores) · P \(pCores)", fraction: cpuFrac,
+                              color: severityColor(fraction: cpuFrac))
+                    Text(tr("mac.peak", Int(peakCpu.rounded())))
+                        .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
+                }
+                .frame(maxWidth: .infinity)
+                laneDivider
+                // Carril memoria.
+                VStack(spacing: 5) {
+                    LumioRing(label: "MEMORY", value: "\(Int((memFrac * 100).rounded()))%",
+                              sub: String(format: "%.1f of %.0f GB", snap.memUsedGB, snap.memTotalGB),
+                              fraction: memFrac, color: severityColor(fraction: memFrac))
+                    HStack(spacing: 4) {
+                        Circle().fill(pressureColor).frame(width: 6, height: 6)
+                        Text("\(pressureWord) · swap \(String(format: "%.0f", snap.swapUsedGB)) GB")
+                            .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                laneDivider
+                // Carril batería.
+                batteryCard.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.07), Color.white.opacity(0.03)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.09), lineWidth: 1)
+        )
+    }
+
+    private var laneDivider: some View {
+        Rectangle().fill(Color.white.opacity(0.09)).frame(width: 1)
+    }
+
+    private var pressureColor: Color {
+        if snap.memFreeFrac > 0.25 { return Color(hex: "2F9E6E") }
+        if snap.memFreeFrac > 0.12 { return Color(hex: "D9A514") }
+        return Color(hex: "E0574B")
+    }
 
     /// Cabecera de sección plegable (persiste en Ajustes internos).
     private func sectionHeader(title: String, sub: String = "", folded: Binding<Bool>) -> some View {
@@ -601,7 +665,8 @@ struct StatsView: View {
     private var battTimeText: String {
         let m = snap.batt.minutesLeft
         guard m > 0, m < 60000 else { return "—" }
-        return String(format: "%dh %02dm", m / 60, m % 60)
+        let t = String(format: "%dh %02dm", m / 60, m % 60)
+        return snap.batt.estimated ? "~" + t : t
     }
 
     private func battCell(_ label: String, _ value: String, _ color: Color) -> some View {
