@@ -139,16 +139,17 @@ struct TimerRing: View {
 struct TimerView: View {
     @ObservedObject var store: FocusTimerStore
     @ObservedObject private var settings = NotchSettings.shared
+    /// Verde Lumio del timer (el keep awake usa el color del usuario).
+    private let timerGreen = Color(hex: "2F9E6E")
     var body: some View {
         VStack(spacing: 8) {
             // Timer | Cronómetro, como Lumio.
-            Picker("", selection: $store.stopwatch) {
-                Text(tr("focus.timer").capitalized).tag(false)
-                Text(tr("focus.stopwatch")).tag(true)
-            }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .disabled(store.running)
+            NotchSegments(
+                selection: $store.stopwatch,
+                options: [(false, tr("focus.timer").capitalized), (true, tr("focus.stopwatch"))],
+                color: timerGreen,
+                disabledAll: store.running
+            )
             .onChange(of: store.stopwatch) { _ in store.stop() }
 
             TimerRing(progress: store.progress, time: store.running ? store.label : store.stopwatch ? "0:00" : "\(store.minutes):00", total: store.running ? store.totalLabel : "\(store.minutes) min")
@@ -158,15 +159,15 @@ struct TimerView: View {
                 HStack(spacing: 6) {
                     ForEach([15, 25, 50, 90], id: \.self) { m in
                         if store.minutes == m, !store.running {
-                            Button("\(m)") {}.controlSize(.small).buttonStyle(.borderedProminent).disabled(true)
+                            Button("\(m)") {}.buttonStyle(NotchPrimaryButton(size: .small, color: timerGreen)).disabled(true)
                         } else {
-                            Button("\(m)") { store.minutes = m }.controlSize(.small).buttonStyle(.bordered)
+                            Button("\(m)") { store.minutes = m }.buttonStyle(NotchGhostButton(size: .small, tint: timerGreen))
                                 .disabled(store.running)
                         }
                     }
                 }
-                Stepper(tr("focus.minutes", store.minutes), value: $store.minutes, in: 1...180, step: 1)
-                    .font(.caption).disabled(store.running)
+                NotchStepper(label: tr("focus.minutes", store.minutes), value: $store.minutes, range: 1...180, step: 1, color: timerGreen)
+                    .disabled(store.running)
             }
 
             // Controles según estado.
@@ -177,23 +178,22 @@ struct TimerView: View {
                     } label: {
                         Label(tr("focus.start"), systemImage: "play.fill")
                     }
-                    .controlSize(.small).buttonStyle(.borderedProminent)
+                    .buttonStyle(NotchPrimaryButton(size: .small, color: timerGreen))
                 } else if store.paused {
                     Button(tr("focus.resume")) { store.resume() }
-                        .controlSize(.small).buttonStyle(.borderedProminent)
+                        .buttonStyle(NotchPrimaryButton(size: .small, color: timerGreen))
                     Button(tr("focus.stop")) { store.stop() }
-                        .controlSize(.small).buttonStyle(.bordered)
+                        .buttonStyle(NotchGhostButton(size: .small))
                 } else {
                     Button(tr("focus.pause")) { store.pause() }
-                        .controlSize(.small).buttonStyle(.borderedProminent)
+                        .buttonStyle(NotchPrimaryButton(size: .small, color: timerGreen))
                     Button(tr("focus.stop")) { store.stop() }
-                        .controlSize(.small).buttonStyle(.bordered)
+                        .buttonStyle(NotchGhostButton(size: .small))
                 }
                 Spacer()
                 if !store.stopwatch {
                     Toggle(tr("focus.eyeRest"), isOn: $store.eyeRest)
-                        .font(.caption2).toggleStyle(.switch).controlSize(.mini)
-                        .tint(.green)
+                        .font(.caption2).toggleStyle(NotchToggleStyle(color: timerGreen, mini: true))
                 }
             }
             if !store.finishedMessage.isEmpty {
@@ -201,7 +201,7 @@ struct TimerView: View {
                     Text(store.finishedMessage).font(.callout)
                     Spacer()
                     Button(tr("focus.repeat")) { store.start() }
-                        .controlSize(.mini).buttonStyle(.bordered)
+                        .buttonStyle(NotchGhostButton(size: .mini))
                 }
             }
         }
@@ -417,17 +417,12 @@ struct AwakeView: View {
     var body: some View {
         VStack(spacing: 8) {
             // Selector de modo, espejo del Timer|Cronómetro.
-            Picker("", selection: Binding(
-                get: { family },
-                set: { pickFamily($0) }
-            )) {
-                Text(tr("focus.timed")).tag(0)
-                Text("∞").tag(1)
-                Text(tr("focus.auto")).tag(2)
-            }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .disabled(store.active && timedActive)
+            NotchSegments(
+                selection: Binding(get: { family }, set: { pickFamily($0) }),
+                options: [(0, tr("focus.timed")), (1, "∞"), (2, tr("focus.auto"))],
+                color: settings.accent,
+                disabledAll: store.active && timedActive
+            )
 
             TimerRing(
                 progress: store.progress ?? (store.active ? 1 : 0),
@@ -442,17 +437,16 @@ struct AwakeView: View {
                     ForEach([30, 60, 120, 240], id: \.self) { m in
                         let label = m >= 60 ? "\(m / 60)h" : "\(m)m"
                         if presetMinutes == m, !store.active {
-                            Button(label) {}.controlSize(.small).buttonStyle(.borderedProminent).disabled(true)
+                            Button(label) {}.buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent)).disabled(true)
                         } else {
                             Button(label) { store.customMinutes = m }
-                                .controlSize(.small).buttonStyle(.bordered)
+                                .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
                                 .disabled(store.active)
                         }
                     }
                 }
-                .tint(settings.accent)
-                Stepper(tr("focus.minutes", store.customMinutes), value: $store.customMinutes, in: 15...720, step: 15)
-                    .font(.caption).disabled(store.active)
+                NotchStepper(label: tr("focus.minutes", store.customMinutes), value: $store.customMinutes, range: 15...720, step: 15, color: settings.accent)
+                    .disabled(store.active)
             } else {
                 Text(family == 1 ? tr("focus.forever") : tr("set.autosendSub"))
                     .font(.caption2).foregroundStyle(Color.white.opacity(0.45))
@@ -468,12 +462,10 @@ struct AwakeView: View {
                     } label: {
                         Label(tr("focus.start"), systemImage: "play.fill")
                     }
-                    .controlSize(.small).buttonStyle(.borderedProminent)
-                    .tint(settings.accent)
+                    .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
                 } else {
                     Button(tr("focus.stop")) { store.set("off", store: sessions) }
-                        .controlSize(.small).buttonStyle(.borderedProminent)
-                        .tint(settings.accent)
+                        .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
                 }
                 Spacer()
                 if store.active {
@@ -483,14 +475,13 @@ struct AwakeView: View {
             }
             // Qué evitar (a libre elección).
             HStack(spacing: 12) {
-                Toggle(tr("focus.screen"), isOn: $store.preventDisplay).controlSize(.mini)
+                Toggle(tr("focus.screen"), isOn: $store.preventDisplay)
                     .onChange(of: store.preventDisplay) { _ in restart() }
-                Toggle(tr("focus.screensaver"), isOn: $store.preventScreensaver).controlSize(.mini)
+                Toggle(tr("focus.screensaver"), isOn: $store.preventScreensaver)
                     .onChange(of: store.preventScreensaver) { _ in restart() }
             }
             .font(.caption)
-            .toggleStyle(.switch)
-            .tint(settings.accent)
+            .toggleStyle(NotchToggleStyle(color: settings.accent, mini: true))
             if store.active {
                 HStack(spacing: 3) {
                     Circle().fill(settings.accent).frame(width: 6, height: 6)

@@ -100,10 +100,9 @@ struct HistoryView: View {
             HStack {
                 Text(dayOffset == 0 ? tr("hist.today") : dayName).font(.notchMono(11)).foregroundStyle(.secondary)
                 Spacer()
-                Button("‹") { dayOffset = max(-6, dayOffset - 1) }.controlSize(.small)
-                Button("›") { dayOffset = min(0, dayOffset + 1) }.controlSize(.small)
+                Button("‹") { dayOffset = max(-6, dayOffset - 1) }.buttonStyle(NotchGhostButton(size: .small))
+                Button("›") { dayOffset = min(0, dayOffset + 1) }.buttonStyle(NotchGhostButton(size: .small))
             }
-            .buttonStyle(.bordered)
             let rows = store.hours(for: day)
             if rows.allSatisfy({ $0.count == 0 }) {
                 Text(tr("hist.empty")).font(.caption).foregroundStyle(.secondary)
@@ -192,11 +191,13 @@ struct SettingsView: View {
             Text("ajustes").font(.caption).foregroundStyle(.secondary)
             Toggle("Abrir al pasar el ratón por el notch", isOn: $hoverOpen)
                 .font(.callout)
+                .toggleStyle(NotchToggleStyle(mini: true))
                 .onChange(of: hoverOpen) { v in
                     UserDefaults.standard.set(v, forKey: "notchHoverOpen")
                 }
             Toggle("Auto-send en Claude (Accessibility)", isOn: $autoSend)
                 .font(.callout)
+                .toggleStyle(NotchToggleStyle(mini: true))
                 .onChange(of: autoSend) { v in
                     if v && !ReplyService.shared.isTrusted {
                         ReplyService.shared.requestTrust()

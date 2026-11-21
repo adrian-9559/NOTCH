@@ -223,7 +223,7 @@ struct TasksView: View {
                 }
                 Spacer()
                 Toggle(tr("task.auto"), isOn: $settings.autoSendTasks)
-                    .font(.caption2).toggleStyle(.switch).controlSize(.mini)
+                    .font(.caption2).toggleStyle(NotchToggleStyle(color: settings.accent, mini: true))
                 Button {
                     showAdd.toggle()
                     if !showAdd { resetForm() }
@@ -231,7 +231,7 @@ struct TasksView: View {
                     Image(systemName: showAdd ? "xmark" : "plus")
                         .font(.system(size: 11, weight: .bold))
                 }
-                .buttonStyle(.bordered).controlSize(.small)
+                .buttonStyle(NotchGhostButton(size: .small))
             }
             if !tasks.lastError.isEmpty {
                 Text(tasks.lastError).font(.caption2).foregroundStyle(.red.opacity(0.9)).lineLimit(1)
@@ -240,14 +240,11 @@ struct TasksView: View {
                 addForm
             }
             HStack(spacing: 4) {
-                Picker("", selection: $filterRaw) {
-                    Text(tr("task.all")).tag(nil as String?)
-                    Text(tr("task.todo")).tag("todo" as String?)
-                    Text(tr("task.doing")).tag("doing" as String?)
-                    Text(tr("task.done")).tag("done" as String?)
-                }
-                .pickerStyle(.segmented)
-                .controlSize(.mini)
+                NotchSegments(
+                    selection: $filterRaw,
+                    options: [(nil, tr("task.all")), ("todo", tr("task.todo")), ("doing", tr("task.doing")), ("done", tr("task.done"))],
+                    color: settings.accent
+                )
                 .frame(maxWidth: 300)
                 Spacer()
                 Menu(agentFilterRaw.flatMap({ AgentID(rawValue: $0)?.displayName }) ?? tr("task.anyone")) {
@@ -291,12 +288,11 @@ struct TasksView: View {
                     }
                 }
                 .controlSize(.small)
-                Picker("", selection: $priority) {
-                    Text(tr("task.low")).tag(TaskPriority.low)
-                    Text(tr("task.normal")).tag(TaskPriority.normal)
-                    Text(tr("task.high")).tag(TaskPriority.high)
-                }
-                .pickerStyle(.segmented).controlSize(.mini)
+                NotchSegments(
+                    selection: $priority,
+                    options: [(TaskPriority.low, tr("task.low")), (.normal, tr("task.normal")), (.high, tr("task.high"))],
+                    color: settings.accent
+                )
                 .frame(maxWidth: 220)
                 Spacer()
                 Button(tr("task.add")) {
@@ -310,7 +306,7 @@ struct TasksView: View {
                         TaskDispatcher.send(created, via: ss, store: tasks)
                     }
                 }
-                .controlSize(.small).buttonStyle(.borderedProminent)
+                .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
                 .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -384,19 +380,18 @@ private struct TaskRow: View {
                             if let ss = sessions {
                                 TaskDispatcher.send(task, via: ss, store: store)
                             }
-                        }.controlSize(.mini).buttonStyle(.borderedProminent)
+                        }.buttonStyle(NotchPrimaryButton(size: .mini, color: settings.accent))
                     }
-                    Button(tr("task.up")) { move(-1) }.controlSize(.mini)
-                    Button(tr("task.down")) { move(1) }.controlSize(.mini)
+                    Button(tr("task.up")) { move(-1) }.buttonStyle(NotchGhostButton(size: .mini))
+                    Button(tr("task.down")) { move(1) }.buttonStyle(NotchGhostButton(size: .mini))
                     Button(task.status == .archived ? tr("task.unarchive") : tr("task.archive")) {
                         var t = task
                         t.status = t.status == .archived ? .todo : .archived
                         store.update(t)
-                    }.controlSize(.mini)
+                    }.buttonStyle(NotchGhostButton(size: .mini))
                     Button(tr("task.delete")) { store.remove(task) }
-                        .controlSize(.mini).foregroundStyle(.red.opacity(0.9))
+                        .buttonStyle(NotchGhostButton(size: .mini, tint: Color(hex: "E0574B")))
                 }
-                .buttonStyle(.bordered)
                 .font(.caption)
             }
         }

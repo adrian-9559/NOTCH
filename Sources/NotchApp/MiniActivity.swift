@@ -109,13 +109,11 @@ struct ActivityView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("", selection: $range) {
-                Text(tr("act.day")).tag(0)
-                Text(tr("act.week")).tag(1)
-                Text(tr("act.month")).tag(2)
-            }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
+            NotchSegments(
+                selection: $range,
+                options: [(0, tr("act.day")), (1, tr("act.week")), (2, tr("act.month"))],
+                color: settings.accent
+            )
 
             let rows = store.activeSecondsPerAgent(since: since)
             let total = rows.reduce(0.0) { $0 + $1.seconds }

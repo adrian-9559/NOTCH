@@ -367,11 +367,11 @@ struct StatsView: View {
             if !foldLoads {
                 loadBar
                 HStack(spacing: 6) {
-                    Picker("", selection: $sortByCpu) {
-                        Text("CPU").tag(true)
-                        Text("MEM").tag(false)
-                    }
-                    .pickerStyle(.segmented).controlSize(.mini)
+                    NotchSegments(
+                        selection: $sortByCpu,
+                        options: [(true, "CPU"), (false, "MEM")],
+                        color: settings.accent
+                    )
                     .frame(maxWidth: 150)
                     TextField(tr("mac.search"), text: $procQuery)
                         .textFieldStyle(.roundedBorder).font(.caption)
@@ -402,7 +402,7 @@ struct StatsView: View {
                         Spacer()
                         if t.pid > 500 {
                             Button(tr("mac.terminate")) { confirmStop(t) }
-                                .controlSize(.mini).buttonStyle(.bordered)
+                                .buttonStyle(NotchGhostButton(size: .mini))
                         }
                     }
                     .padding(.horizontal, 8).padding(.vertical, 5)
@@ -430,9 +430,8 @@ struct StatsView: View {
                             Text(verbatim: ":\(sv.port) \(sv.proc)").font(.notchMono(11)).foregroundStyle(.white)
                             Text(sv.agent.map { "\($0) · \(tr("mac.running"))" } ?? tr("mac.process")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             Spacer()
-                            Button(tr("mac.open")) { MacPanelReader.openPort(sv.port) }.controlSize(.small).buttonStyle(.bordered)
-                                .tint(.green)
-                            Button(tr("mac.stop")) { MacPanelReader.stopPid(sv.pid); refreshHeavy() }.controlSize(.small).buttonStyle(.bordered)
+                            Button(tr("mac.open")) { MacPanelReader.openPort(sv.port) }.buttonStyle(NotchGhostButton(size: .small, tint: Color(hex: "2F9E6E")))
+                            Button(tr("mac.stop")) { MacPanelReader.stopPid(sv.pid); refreshHeavy() }.buttonStyle(NotchGhostButton(size: .small))
                         }
                         .font(.caption)
                     }
@@ -1078,7 +1077,7 @@ struct JunkSectionView: View {
                     } label: {
                         Image(systemName: "trash").font(.system(size: 10))
                     }
-                    .buttonStyle(.bordered).controlSize(.mini)
+                    .buttonStyle(NotchGhostButton(size: .mini))
                     .disabled(!allIdle)
                     .help(allIdle ? tr("mac.toTrash") : tr("mac.waitAgents"))
                 }
@@ -1086,7 +1085,7 @@ struct JunkSectionView: View {
             Button(allIdle ? tr("mac.cleanAll") : tr("mac.waitAgents")) {
                 confirmClean()
             }
-            .controlSize(.small).buttonStyle(.borderedProminent).tint(.red)
+            .buttonStyle(NotchPrimaryButton(size: .small, color: Color(hex: "E0574B")))
             .disabled(!allIdle || junk.rows.isEmpty)
         }
         if !junk.lastCleaned.isEmpty {

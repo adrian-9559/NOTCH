@@ -274,20 +274,17 @@ private struct WaitingCard: View {
                 .lineLimit(2)
             HStack(spacing: 6) {
                 Button(tr("waiting.allow")) { onAllow(session) }
-                    .buttonStyle(.borderedProminent)
-                    .tint(settings.accent)
-                    .controlSize(.small)
+                    .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
                 TextField(tr("waiting.replyPh"), text: $replyText, onCommit: {
                     onReply(session, replyText); replyText = ""
                 })
                 .textFieldStyle(.roundedBorder)
                 .font(.notchMono(11))
                 Button(tr("waiting.send")) { onReply(session, replyText); replyText = "" }
-                    .controlSize(.small)
+                    .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
                     .disabled(replyText.isEmpty)
                 Button(tr("waiting.open")) { onOpen(session) }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .buttonStyle(NotchGhostButton(size: .small))
             }
         }
         .padding(10)

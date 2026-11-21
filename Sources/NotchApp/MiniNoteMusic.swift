@@ -82,11 +82,10 @@ struct QuickNoteView: View {
             })
             .textFieldStyle(.roundedBorder)
             HStack {
-                Button(tr("note.save")) { store.save(text); text = "" }.controlSize(.small).buttonStyle(.borderedProminent)
-                Button(tr("note.toNotes")) { store.saveToAppleNotes(text); text = "" }.controlSize(.small)
+                Button(tr("note.save")) { store.save(text); text = "" }.buttonStyle(NotchPrimaryButton(size: .small))
+                Button(tr("note.toNotes")) { store.saveToAppleNotes(text); text = "" }.buttonStyle(NotchGhostButton(size: .small))
                 Text(store.lastSaved).font(.caption2).foregroundStyle(.secondary)
             }
-            .buttonStyle(.bordered)
             TextField(tr("note.vaultPh"), text: $vaultPath, onCommit: {
                 UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
             })

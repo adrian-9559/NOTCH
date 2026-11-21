@@ -357,8 +357,8 @@ struct SettingsModalView: View {
                             get: { visible },
                             set: { settings.setVisible(id, $0) }
                         ))
-                        .toggleStyle(.switch).controlSize(.mini).labelsHidden()
-                        .tint(settings.accent)
+                        .toggleStyle(NotchToggleStyle(color: settings.accent, mini: true))
+                        .labelsHidden()
                     }
                     .padding(.vertical, 5).padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(visible ? 0.05 : 0.02)))
@@ -463,7 +463,7 @@ struct SettingsModalView: View {
                     Button(role: .destructive) { confirmClearData() } label: {
                         Text(tr("set.clear"))
                     }
-                    .controlSize(.small).buttonStyle(.bordered)
+                    .buttonStyle(NotchGhostButton(size: .small))
                 }
                 Text(dataSummary)
                     .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.4))
@@ -648,8 +648,8 @@ private struct IconToggleRow: View {
             }
             Spacer()
             Toggle("", isOn: $isOn)
-                .toggleStyle(.switch).controlSize(.mini).labelsHidden()
-                .tint(accent)
+                .toggleStyle(NotchToggleStyle(color: accent, mini: true))
+                .labelsHidden()
                 .onChange(of: isOn) { _ in onChange() }
         }
         .padding(.vertical, 4)
@@ -673,7 +673,7 @@ private struct DurationRow: View {
                 Image(systemName: "minus").font(.system(size: 10, weight: .bold))
                     .frame(width: 22, height: 22)
             }
-            .buttonStyle(.bordered).controlSize(.mini).tint(accent)
+            .buttonStyle(NotchGhostButton(size: .mini, tint: accent))
             .disabled(value <= range.lowerBound)
             Text("\(Int(value))\(suffix)")
                 .font(.notchMono(12)).foregroundStyle(accent).monospacedDigit()
@@ -682,7 +682,7 @@ private struct DurationRow: View {
                 Image(systemName: "plus").font(.system(size: 10, weight: .bold))
                     .frame(width: 22, height: 22)
             }
-            .buttonStyle(.bordered).controlSize(.mini).tint(accent)
+            .buttonStyle(NotchGhostButton(size: .mini, tint: accent))
             .disabled(value >= range.upperBound)
         }
         .padding(.vertical, 2)
@@ -699,10 +699,10 @@ private struct PresetPill: View {
     var body: some View {
         if selected {
             Button(label, action: action)
-                .controlSize(.mini).buttonStyle(.borderedProminent).tint(accent)
+                .buttonStyle(NotchPrimaryButton(size: .mini, color: accent))
         } else {
             Button(label, action: action)
-                .controlSize(.mini).buttonStyle(.bordered).tint(accent)
+                .buttonStyle(NotchGhostButton(size: .mini, tint: accent))
         }
     }
 }

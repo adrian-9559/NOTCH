@@ -337,8 +337,7 @@ struct ShelfView: View {
                             Button("JPG") { pick(shelf.convertToJPG) }
                             Button("PDF") { pick(shelf.convertToPDF) }
                         }
-                        .controlSize(.mini)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(NotchGhostButton(size: .mini))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -443,8 +442,7 @@ private struct ShelfRow: View {
                     Button("JPG") { shelf.convertToJPG(item) }
                     Button("PDF") { shelf.convertToPDF(item) }
                 }
-                .controlSize(.mini)
-                .buttonStyle(.bordered)
+                .buttonStyle(NotchGhostButton(size: .mini))
                 HStack(spacing: 4) {
                     Button(tr("shelf.view")) { shelf.reveal(item) }
                     Button(tr("shelf.path")) {
