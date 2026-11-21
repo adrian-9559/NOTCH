@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 import NotchCore
 import SwiftUI
 
@@ -29,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var workingSince: [AgentID: Date] = [:]
     /// Generación por agente: un aviso viejo no pisa a uno nuevo.
     private var doneGen: [AgentID: Int] = [:]
+    private var cancellables = Set<AnyCancellable>()
     private var hover = NotchHoverController()
     private var notchAnchorX: CGFloat?
     private var notchTopY: CGFloat?
@@ -111,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showPanel() {
         toast.hide()
         agentToast.hide()
+        lights.setPanelOpen(true)
         windowController?.show(anchorX: notchAnchorX, topY: notchTopY)
     }
 
@@ -143,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func hidePanel() {
+        lights.setPanelOpen(false)
         windowController?.hide()
     }
 
@@ -205,6 +209,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toast.rebuild(notches: notches)
         agentToast.isPanelVisible = { [weak self] in self?.windowController?.isVisible == true }
         agentToast.rebuild(notches: notches)
+        // Mientras sale el aviso de canción, la píldora se quita y vuelve al irse.
+        toast.state.$visible
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.lights.setToastShowing($0) }
+            .store(in: &cancellables)
     }
 
     // MARK: - Hover: abrir al subir el ratón, cerrar al sacarlo

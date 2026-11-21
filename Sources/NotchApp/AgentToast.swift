@@ -140,6 +140,7 @@ final class AgentToastController {
     }
 
     func show(session: AgentSession) {
+        guard NotchSettings.shared.agentToastEnabled else { return }
         guard isPanelVisible?() != true else { return }
         // El detail de un done es el snapshot (path): acorta ~/.
         var detail = (session.detail ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

@@ -27,6 +27,14 @@ final class NotchSettings: ObservableObject {
     @Published var hiddenTabs: [String] {
         didSet { save() }
     }
+    /// Píldora al cambiar de canción (aviso estilo Lumio).
+    @Published var songToastEnabled: Bool {
+        didSet { save() }
+    }
+    /// Píldora al terminar un agente.
+    @Published var agentToastEnabled: Bool {
+        didSet { save() }
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -46,6 +54,8 @@ final class NotchSettings: ObservableObject {
         tabOrder = order
         hiddenTabs = (d.stringArray(forKey: "notchHiddenTabs") ?? [])
             .filter { Self.tabTitles.contains($0) }
+        songToastEnabled = d.object(forKey: "notchSongToast") as? Bool ?? true
+        agentToastEnabled = d.object(forKey: "notchAgentToast") as? Bool ?? true
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder)\n", stderr)
     }
@@ -81,6 +91,8 @@ final class NotchSettings: ObservableObject {
         d.set(panelOpacity, forKey: "notchPanelOpacity")
         d.set(tabOrder, forKey: "notchTabOrder")
         d.set(hiddenTabs, forKey: "notchHiddenTabs")
+        d.set(songToastEnabled, forKey: "notchSongToast")
+        d.set(agentToastEnabled, forKey: "notchAgentToast")
     }
 }
 #endif

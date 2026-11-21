@@ -216,6 +216,16 @@ struct SettingsModalView: View {
                 Text(trustState ? "Accesibilidad: concedida ✓" : "Accesibilidad: pendiente (solo si activas auto-send)")
                     .font(.notchMono(9))
                     .foregroundStyle(Color.white.opacity(0.45))
+                SettingsToggleRow(
+                    label: "Aviso al cambiar de canción",
+                    isOn: $settings.songToastEnabled,
+                    accent: settings.accent
+                ) {}
+                SettingsToggleRow(
+                    label: "Aviso al terminar un agente",
+                    isOn: $settings.agentToastEnabled,
+                    accent: settings.accent
+                ) {}
                 TextField("Obsidian vault (dev log)", text: $vaultPath, onCommit: {
                     UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
                 })

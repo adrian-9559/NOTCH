@@ -51,7 +51,8 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
   - **Abrir**: trae al frente la ventana del agente.
 - **Aviso "ha terminado"**: cuando un agente acaba DE VERDAD sale del
   notch una píldora con su color y qué ha terminado; se oculta sola.
-  (Si solo hace una pausa entre subtareas, no molesta.)
+  (Si solo hace una pausa entre subtareas, no molesta.) Se puede
+  desactivar en Ajustes, igual que el de canción.
 - **Auto-send (opcional)**: en el modal de Ajustes (`⚙` o `⌘,`) puedes
   activar que la respuesta se envíe sola con Enter. macOS pedirá permiso de
   **Accesibilidad** una sola vez. Sin este permiso, NOTCH copia al portapapeles
@@ -64,11 +65,12 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
   se apaga.
 - **Aviso de canción nueva**: al cambiar de canción sale del notch una
   píldora con la carátula en pequeño, el título y el ecualizador; se
-  oculta sola a los pocos segundos.
+  oculta sola a los pocos segundos (mientras sale, la píldora pequeña
+  se quita y vuelve después). Se puede desactivar en Ajustes.
 - **Cover y onda junto al notch**: mientras suena algo, del notch sale una
   píldora negra total con la carátula en un extremo, el tiempo y la barra
-  en el centro y la onda en el otro extremo, con el borde iluminado del
-  color de la canción (como Lumio, sin agentes ni tiempos). Al pausar se
+  en el centro y la onda en el otro extremo, con el color solo abajo
+  (arriba negro puro). Se oculta al abrir el panel. Al pausar se
   atenúa; al cerrar el reproductor desaparece.
 
 ## Pestañas

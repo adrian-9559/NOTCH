@@ -92,14 +92,33 @@ struct NotchLightsView: View {
             style: .continuous
         )
         let edge = music.tint ?? .white
-        // Negra total por dentro; el color solo vive en el halo y el filo.
+        // Negra total por dentro y por arriba; el color solo vive abajo:
+        // el degradado es transparente arriba (su sangrado no tiñe) y el
+        // filo se enmascara a la mitad inferior.
+        let bottomFade = LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black, location: 0.45),
+                .init(color: .black, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
         return ZStack {
-            // Halo exterior del color de la canción (borde de Lumio).
-            shape.fill(edge.opacity(0.5)).blur(radius: 10)
             shape.fill(Color.black)
+            shape.fill(
+                LinearGradient(
+                    colors: [.clear, edge.opacity(0.55)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .blur(radius: 7)
         }
-        .overlay(shape.stroke(edge.opacity(0.55), lineWidth: 1))
-        .shadow(color: edge.opacity(0.45), radius: 10)
+        .overlay(
+            shape.stroke(edge.opacity(0.6), lineWidth: 1)
+                .mask(bottomFade)
+        )
     }
 
     private func fmt(_ seconds: Double) -> String {
@@ -111,6 +130,10 @@ struct NotchLightsView: View {
 final class NotchLightsController {
     private var panels: [NSPanel] = []
     private var cancellables = Set<AnyCancellable>()
+    /// Último estado musical visto (para combinar con panel/toast).
+    private var hasSong = false
+    private var panelOpen = false
+    private var toastShowing = false
 
     /// Reconstruye la píldora para las pantallas actuales. Solo se
     /// muestra con música (carátula disponible); sin música, nada.
@@ -132,18 +155,30 @@ final class NotchLightsController {
             .combineLatest(m0.$artwork, m0.$playerLive)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] title, art, live in
-                guard let self else { return }
-                if !title.isEmpty, art != nil, live {
-                    self.panels.forEach { $0.orderFrontRegardless() }
-                } else {
-                    self.panels.forEach { $0.orderOut(nil) }
-                }
+                self?.hasSong = !title.isEmpty && art != nil && live
+                self?.updateVisibility()
             }
             .store(in: &cancellables)
-        // Estado inicial.
-        let m = NotchContext.shared.music
-        if !m.title.isEmpty, m.artwork != nil, m.playerLive {
+        updateVisibility()
+    }
+
+    /// La píldora estorba con el panel abierto o con el aviso: fuera.
+    func setPanelOpen(_ open: Bool) {
+        panelOpen = open
+        updateVisibility()
+    }
+
+    func setToastShowing(_ showing: Bool) {
+        toastShowing = showing
+        updateVisibility()
+    }
+
+    private func updateVisibility() {
+        let show = hasSong && !panelOpen && !toastShowing
+        if show {
             panels.forEach { $0.orderFrontRegardless() }
+        } else {
+            panels.forEach { $0.orderOut(nil) }
         }
     }
 

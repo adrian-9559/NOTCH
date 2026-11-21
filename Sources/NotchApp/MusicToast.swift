@@ -185,6 +185,7 @@ final class MusicToastController {
     }
 
     @objc private func trackChanged() {
+        guard NotchSettings.shared.songToastEnabled else { return }
         guard isPanelVisible?() != true else { return }
         state.announce()
     }
