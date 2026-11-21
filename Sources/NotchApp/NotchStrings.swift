@@ -25,7 +25,7 @@ enum NotchLang: String, CaseIterable {
 
 /// IDs estables de pestaña (lo que se guarda en Ajustes).
 enum NotchTab: String, CaseIterable {
-    case shelf, focus, mac, activity, music, notes
+    case shelf, focus, mac, activity, music, notes, tasks
 
     /// Título visible según el idioma.
     var title: String { tr("tab.\(rawValue)") }
@@ -38,6 +38,7 @@ enum NotchTab: String, CaseIterable {
         case .activity: return "chart.bar"
         case .music: return "music.note"
         case .notes: return "note.text"
+        case .tasks: return "checklist"
         }
     }
 }
@@ -65,6 +66,7 @@ enum NotchStrings {
         "es": [
             "tab.shelf": "Shelf", "tab.focus": "Focus", "tab.mac": "Mac",
             "tab.activity": "Actividad", "tab.music": "Música", "tab.notes": "Notas",
+            "tab.tasks": "Tareas",
             "nav.active": "activos", "nav.idle": "sin agentes",
             "waiting.needs": "te necesita", "waiting.tag": "espera",
             "waiting.allow": "Allow", "waiting.replyPh": "Responder…",
@@ -130,6 +132,8 @@ enum NotchStrings {
             "act.yesterday": "ayer",
             "mus.silence": "SILENCIO", "mus.none": "Music / Spotify",
             "mus.music": "MÚSICA",
+            "mus.prev": "Anterior", "mus.next": "Siguiente",
+            "mus.pause": "Pausa", "mus.play": "Reproducir",
             "note.hint": "una idea? ⌥ der.", "note.ph": "Tap, type, Enter…",
             "note.save": "Guardar", "note.toNotes": "→ Notes",
             "note.saved": "Guardado ✓", "note.inNotes": "En Apple Notes ✓",
@@ -156,6 +160,17 @@ enum NotchStrings {
             "set.local": "NOTCH · 100% local",
             "set.language": "idioma", "set.languageSub": "Idioma de NOTCH (pestañas aparte)",
             "toast.done": "%@ ha terminado", "toast.taskDone": "tarea completada",
+            "task.title": "Tareas", "task.new": "Nueva tarea",
+            "task.titlePh": "Qué hay que hacer…", "task.detailPh": "Detalle (opcional)",
+            "task.anyone": "Cualquiera", "task.add": "Añadir",
+            "task.low": "Baja", "task.normal": "Media", "task.high": "Alta",
+            "task.all": "Todas", "task.todo": "Pte.", "task.doing": "En curso",
+            "task.done": "Hechas", "task.archived": "Archivadas",
+            "task.empty": "Sin tareas — crea la primera con +",
+            "task.archive": "Archivar", "task.unarchive": "Recuperar",
+            "task.delete": "Eliminar", "task.open": "%d abiertas",
+            "task.sentAt": "enviada %@", "task.doneAt": "hecha %@",
+            "task.up": "Subir", "task.down": "Bajar",
             "menu.open": "Abrir notch", "menu.settings": "Ajustes…",
             "menu.refresh": "Ver agentes ahora", "menu.quit": "Salir",
             "menu.hover": "Abrir al pasar el ratón",
@@ -166,6 +181,7 @@ enum NotchStrings {
         "en": [
             "tab.shelf": "Shelf", "tab.focus": "Focus", "tab.mac": "Mac",
             "tab.activity": "Activity", "tab.music": "Music", "tab.notes": "Notes",
+            "tab.tasks": "Tasks",
             "nav.active": "active", "nav.idle": "no agents",
             "waiting.needs": "needs you", "waiting.tag": "waiting",
             "waiting.allow": "Allow", "waiting.replyPh": "Reply…",
@@ -231,6 +247,8 @@ enum NotchStrings {
             "act.yesterday": "yesterday",
             "mus.silence": "SILENCE", "mus.none": "Music / Spotify",
             "mus.music": "MUSIC",
+            "mus.prev": "Previous", "mus.next": "Next",
+            "mus.pause": "Pause", "mus.play": "Play",
             "note.hint": "an idea? right ⌥.", "note.ph": "Tap, type, Enter…",
             "note.save": "Save", "note.toNotes": "→ Notes",
             "note.saved": "Saved ✓", "note.inNotes": "In Apple Notes ✓",
@@ -257,6 +275,17 @@ enum NotchStrings {
             "set.local": "NOTCH · 100% local",
             "set.language": "language", "set.languageSub": "NOTCH language (tabs aside)",
             "toast.done": "%@ finished", "toast.taskDone": "task completed",
+            "task.title": "Tasks", "task.new": "New task",
+            "task.titlePh": "What needs doing…", "task.detailPh": "Detail (optional)",
+            "task.anyone": "Anyone", "task.add": "Add",
+            "task.low": "Low", "task.normal": "Medium", "task.high": "High",
+            "task.all": "All", "task.todo": "To do", "task.doing": "Doing",
+            "task.done": "Done", "task.archived": "Archived",
+            "task.empty": "No tasks — create the first with +",
+            "task.archive": "Archive", "task.unarchive": "Restore",
+            "task.delete": "Delete", "task.open": "%d open",
+            "task.sentAt": "sent %@", "task.doneAt": "done %@",
+            "task.up": "Up", "task.down": "Down",
             "menu.open": "Open notch", "menu.settings": "Settings…",
             "menu.refresh": "Check agents now", "menu.quit": "Quit",
             "menu.hover": "Open on hover",
@@ -267,6 +296,7 @@ enum NotchStrings {
         "fr": [
             "tab.shelf": "Casier", "tab.focus": "Focus", "tab.mac": "Mac",
             "tab.activity": "Activité", "tab.music": "Musique", "tab.notes": "Notes",
+            "tab.tasks": "Tâches",
             "nav.active": "actifs", "nav.idle": "aucun agent",
             "waiting.needs": "a besoin de toi", "waiting.tag": "attente",
             "waiting.allow": "Autoriser", "waiting.replyPh": "Répondre…",
@@ -332,6 +362,8 @@ enum NotchStrings {
             "act.yesterday": "hier",
             "mus.silence": "SILENCE", "mus.none": "Musique / Spotify",
             "mus.music": "MUSIQUE",
+            "mus.prev": "Précédent", "mus.next": "Suivant",
+            "mus.pause": "Pause", "mus.play": "Lecture",
             "note.hint": "une idée ? ⌥ droite.", "note.ph": "Tap, type, Enter…",
             "note.save": "Sauver", "note.toNotes": "→ Notes",
             "note.saved": "Sauvé ✓", "note.inNotes": "Dans Apple Notes ✓",
@@ -358,6 +390,17 @@ enum NotchStrings {
             "set.local": "NOTCH · 100% local",
             "set.language": "langue", "set.languageSub": "Langue de NOTCH (onglets à part)",
             "toast.done": "%@ a terminé", "toast.taskDone": "tâche terminée",
+            "task.title": "Tâches", "task.new": "Nouvelle tâche",
+            "task.titlePh": "À faire…", "task.detailPh": "Détail (optionnel)",
+            "task.anyone": "N'importe qui", "task.add": "Ajouter",
+            "task.low": "Basse", "task.normal": "Moyenne", "task.high": "Haute",
+            "task.all": "Toutes", "task.todo": "À faire", "task.doing": "En cours",
+            "task.done": "Terminées", "task.archived": "Archivées",
+            "task.empty": "Aucune tâche — crée la première avec +",
+            "task.archive": "Archiver", "task.unarchive": "Restaurer",
+            "task.delete": "Supprimer", "task.open": "%d ouvertes",
+            "task.sentAt": "envoyée %@", "task.doneAt": "terminée %@",
+            "task.up": "Monter", "task.down": "Descendre",
             "menu.open": "Ouvrir le notch", "menu.settings": "Réglages…",
             "menu.refresh": "Voir les agents", "menu.quit": "Quitter",
             "menu.hover": "Ouvrir au survol",
@@ -368,6 +411,7 @@ enum NotchStrings {
         "de": [
             "tab.shelf": "Ablage", "tab.focus": "Fokus", "tab.mac": "Mac",
             "tab.activity": "Aktivität", "tab.music": "Musik", "tab.notes": "Notizen",
+            "tab.tasks": "Aufgaben",
             "nav.active": "aktiv", "nav.idle": "keine Agents",
             "waiting.needs": "braucht dich", "waiting.tag": "wartet",
             "waiting.allow": "Erlauben", "waiting.replyPh": "Antworten…",
@@ -433,6 +477,8 @@ enum NotchStrings {
             "act.yesterday": "gestern",
             "mus.silence": "STILLE", "mus.none": "Musik / Spotify",
             "mus.music": "MUSIK",
+            "mus.prev": "Zurück", "mus.next": "Weiter",
+            "mus.pause": "Pause", "mus.play": "Abspielen",
             "note.hint": "eine Idee? ⌥ rechts.", "note.ph": "Tap, type, Enter…",
             "note.save": "Sichern", "note.toNotes": "→ Notes",
             "note.saved": "Gesichert ✓", "note.inNotes": "In Apple Notes ✓",
@@ -459,6 +505,17 @@ enum NotchStrings {
             "set.local": "NOTCH · 100% lokal",
             "set.language": "Sprache", "set.languageSub": "NOTCH-Sprache (Tabs ausgenommen)",
             "toast.done": "%@ ist fertig", "toast.taskDone": "Aufgabe erledigt",
+            "task.title": "Aufgaben", "task.new": "Neue Aufgabe",
+            "task.titlePh": "Was ist zu tun…", "task.detailPh": "Detail (optional)",
+            "task.anyone": "Egal", "task.add": "Hinzufügen",
+            "task.low": "Niedrig", "task.normal": "Mittel", "task.high": "Hoch",
+            "task.all": "Alle", "task.todo": "Offen", "task.doing": "Läuft",
+            "task.done": "Fertig", "task.archived": "Archiviert",
+            "task.empty": "Keine Aufgaben — erste mit + erstellen",
+            "task.archive": "Archivieren", "task.unarchive": "Wiederherstellen",
+            "task.delete": "Löschen", "task.open": "%d offen",
+            "task.sentAt": "gesendet %@", "task.doneAt": "fertig %@",
+            "task.up": "Hoch", "task.down": "Runter",
             "menu.open": "Notch öffnen", "menu.settings": "Einstellungen…",
             "menu.refresh": "Agents jetzt ansehen", "menu.quit": "Beenden",
             "menu.hover": "Bei Hover öffnen",
