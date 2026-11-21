@@ -354,6 +354,7 @@ struct StatsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             measurementsCard
+                .padding(.top, -6)
             // Qué carga el Mac (plegable).
             sectionHeader(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total", folded: $foldLoads)
             if !foldLoads {
@@ -454,14 +455,14 @@ struct StatsView: View {
     /// carriles con divisores, cada uno con su anillo. El pico y la
     /// presión viven en su carril.
     private var measurementsCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
                 Circle().fill(Color(hex: "2F9E6E")).frame(width: 6, height: 6)
                 Text(tr("mac.measurements")).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
                 Spacer()
                 Text(chip).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.35))
             }
-            HStack(alignment: .top, spacing: 0) {
+            HStack(alignment: .center, spacing: 0) {
                 // Carril CPU.
                 VStack(spacing: 6) {
                     LaneGauge(value: "\(Int((snap.cpuUser + snap.cpuSys).rounded()))%",
@@ -469,9 +470,8 @@ struct StatsView: View {
                     Text("CPU").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
                     Text("E \(eCores) · P \(pCores) · \(tr("mac.peak", Int(peakCpu.rounded())))")
                         .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
-                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity)
                 laneDivider
                 // Carril memoria.
                 VStack(spacing: 6) {
@@ -485,17 +485,14 @@ struct StatsView: View {
                         Text("\(pressureWord) · swap \(String(format: "%.0f", snap.swapUsedGB)) GB")
                             .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
                     }
-                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity)
                 laneDivider
                 // Carril batería.
                 batteryCard.frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(
