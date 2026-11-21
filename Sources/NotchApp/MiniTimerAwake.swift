@@ -79,20 +79,44 @@ struct TimerView: View {
     }
 }
 
-// MARK: - Keep awake (caffeinate)
+// MARK: - Keep awake (caffeinate, configurable)
+//
+// A libre elección: evita el reposo de pantalla y/o el salvapantallas,
+// con duración (30m, 1h, 2h, 4h, sin fin) o Auto mientras trabajan.
+// - Pantalla: `caffeinate -d` (display sleep).
+// - Salvapantallas: `caffeinate -u -t` (actividad de usuario acotada;
+//   en modo sin fin se re-afirma cada pocos minutos).
 
 final class AwakeStore: ObservableObject {
-    @Published var mode = "off" // off | 30m | 1h | 2h | auto
+    @Published var mode = "off" // off | 30m | 1h | 2h | 4h | forever | auto
     @Published var active = false
+    @Published var preventDisplay = true
+    @Published var preventScreensaver = true
+    @Published var remainingStr = ""
     private var proc: Process?
+    private var endAt: Date?
+    private var countdown: Timer?
+    private var uRefresh: Timer?
+
+    static let durations: [(key: String, label: String, seconds: Int)] = [
+        ("off", "Off", 0),
+        ("30m", "30m", 1800),
+        ("1h", "1h", 3600),
+        ("2h", "2h", 7200),
+        ("4h", "4h", 14400),
+        ("forever", "∞", 0),
+        ("auto", "Auto", 0),
+    ]
 
     func set(_ newMode: String, store: SessionStore? = nil) {
         stop()
         mode = newMode
         switch newMode {
-        case "30m": start(seconds: 1800)
-        case "1h": start(seconds: 3600)
-        case "2h": start(seconds: 7200)
+        case "30m", "1h", "2h", "4h":
+            let secs = Self.durations.first { $0.key == newMode }?.seconds ?? 0
+            start(seconds: secs)
+        case "forever":
+            start(seconds: 0)
         case "auto":
             active = true
             lastStore = store
@@ -120,20 +144,66 @@ final class AwakeStore: ObservableObject {
     }
 
     private func start(seconds: Int) {
+        var args = ["-i"]
+        if preventDisplay { args.append("-d") }
+        if preventScreensaver {
+            args.append("-u")
+            if seconds > 0 { args += ["-t", "\(seconds)"] }
+        } else if seconds > 0 {
+            args += ["-t", "\(seconds)"]
+        }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
-        var args = ["-dimsu"]
-        if seconds > 0 { args += ["-t", "\(seconds)"] }
         p.arguments = args
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
-        do { try p.run(); proc = p; active = true } catch { active = false }
+        do {
+            try p.run(); proc = p; active = true
+        } catch { active = false; return }
+        // Sin fin + salvapantallas: re-afirma la actividad cada 200 s.
+        if seconds <= 0, preventScreensaver {
+            uRefresh?.invalidate()
+            uRefresh = Timer.scheduledTimer(withTimeInterval: 200, repeats: true) { _ in
+                let u = Process()
+                u.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
+                u.arguments = ["-u", "-t", "240"]
+                u.standardOutput = FileHandle.nullDevice
+                u.standardError = FileHandle.nullDevice
+                try? u.run()
+            }
+        }
+        // Cuenta atrás visible en los modos con tiempo.
+        if seconds > 0 {
+            endAt = Date().addingTimeInterval(TimeInterval(seconds))
+            countdown?.invalidate()
+            countdown = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                self?.tickCountdown()
+            }
+            tickCountdown()
+        } else {
+            remainingStr = mode == "auto" ? "auto" : "sin fin"
+        }
+    }
+
+    private func tickCountdown() {
+        guard let end = endAt else { return }
+        let left = Int(end.timeIntervalSince(Date()))
+        if left <= 0 {
+            stop()
+            return
+        }
+        remainingStr = String(format: "%d:%02d:%02d", left / 3600, (left % 3600) / 60, left % 60)
     }
 
     func stop() {
         autoTimer?.invalidate()
+        countdown?.invalidate()
+        uRefresh?.invalidate()
+        countdown = nil; uRefresh = nil; autoTimer = nil
         stopProcOnly()
         mode = "off"
+        endAt = nil
+        remainingStr = ""
     }
 
     private func stopProcOnly() {
@@ -149,22 +219,43 @@ struct AwakeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("keep awake").font(.notchMono(11)).foregroundStyle(.secondary)
-            HStack {
-                ForEach([("off", "Off"), ("30m", "30m"), ("1h", "1h"), ("2h", "2h"), ("auto", "Auto")], id: \.0) { key, label in
-                    if store.mode == key {
-                        Button(label) { store.set(key, store: sessions) }
-                            .controlSize(.small)
-                            .buttonStyle(.borderedProminent)
+            // Qué evitar (a libre elección).
+            HStack(spacing: 12) {
+                Toggle("Pantalla", isOn: $store.preventDisplay).controlSize(.mini)
+                    .onChange(of: store.preventDisplay) { _ in restart() }
+                Toggle("Salvapantallas", isOn: $store.preventScreensaver).controlSize(.mini)
+                    .onChange(of: store.preventScreensaver) { _ in restart() }
+            }
+            .font(.caption)
+            .toggleStyle(.switch)
+            // Duración: 30m, 1h, 2h, 4h, sin fin o Auto.
+            HStack(spacing: 4) {
+                ForEach(AwakeStore.durations, id: \.key) { d in
+                    if store.mode == d.key {
+                        Button(d.label) {}.controlSize(.small).buttonStyle(.borderedProminent).disabled(true)
                     } else {
-                        Button(label) { store.set(key, store: sessions) }
-                            .controlSize(.small)
-                            .buttonStyle(.bordered)
+                        Button(d.label) { store.set(d.key, store: sessions) }
+                            .controlSize(.small).buttonStyle(.bordered)
+                    }
+                }
+                Spacer()
+                if store.active {
+                    HStack(spacing: 3) {
+                        Circle().fill(Color.green).frame(width: 6, height: 6)
+                        Text(store.remainingStr.isEmpty ? "Despierto" : store.remainingStr)
+                            .font(.notchMono(10)).foregroundStyle(.green).monospacedDigit()
                     }
                 }
             }
-            if store.active { Text("Despierto").font(.caption2).foregroundStyle(.green) }
         }
         .padding(8)
+    }
+
+    /// Cambiar qué se evita reinicia el modo actual con la nueva mezcla.
+    private func restart() {
+        let m = store.mode
+        guard m != "off" else { return }
+        store.set(m, store: sessions)
     }
 }
 
