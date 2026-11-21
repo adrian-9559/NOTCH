@@ -4,79 +4,97 @@ import Combine
 import NotchCore
 import SwiftUI
 
-/// Píldoras negras pegadas al notch físico (como Lumio): con música,
-/// carátula a la izquierda y onda a la derecha ("cover on the left,
-/// a wave on the right"). Sin música no hay nada (ni puntos).
-/// Clic abre el panel. Se reconstruyen al cambiar las pantallas.
+/// Píldora negra centrada en el notch, como la de Lumio: carátula,
+/// tiempo transcurrido y barra de progreso, con el borde iluminado con
+/// el color de la canción. Sin música no hay nada (ni puntos).
+/// Clic abre el panel. Se reconstruye al cambiar las pantallas.
 struct NotchLightsView: View {
     @ObservedObject private var music = NotchContext.shared.music
-    var alignRight: Bool
     var onTap: () -> Void = {}
 
-    /// Firma para animar la aparición de carátula y onda.
+    /// Firma para animar la aparición y el progreso.
     private var musicSig: String { "\(music.title)|\(music.playing)|\(music.artwork != nil)|\(music.playerLive)" }
 
-    /// Hay algo que mostrar: canción conocida y reproductor abierto.
-    private var hasMusic: Bool { !music.title.isEmpty && music.artwork != nil && music.playerLive }
+    private var fraction: Double {
+        music.duration > 0 ? min(1, max(0, music.position / music.duration)) : 0
+    }
 
     var body: some View {
-        HStack(spacing: 0) {
-            if alignRight { Spacer(minLength: 0) }
-            HStack(spacing: 8) {
-                if alignRight {
-                    coverView
-                } else {
-                    waveView
+        HStack {
+            Spacer(minLength: 0)
+            HStack(spacing: 10) {
+                // Carátula en pequeño.
+                Group {
+                    if let art = music.artwork {
+                        Image(nsImage: art)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else {
+                        ZStack {
+                            LinearGradient(
+                                colors: [(music.tint ?? .gray).opacity(0.7), Color.black.opacity(0.8)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
+                            Image(systemName: "music.note")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.9))
+                        }
+                    }
+                }
+                .frame(width: 30, height: 30)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                // Tiempo + progreso, como Lumio.
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(fmt(music.position))
+                        .font(.notchMono(13))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.2)).frame(width: 90, height: 3)
+                        Capsule()
+                            .fill(Color.white.opacity(0.9))
+                            .frame(width: max(3, 90 * fraction), height: 3)
+                    }
+                    .animation(.linear(duration: 0.5), value: music.position)
                 }
             }
-            .padding(.horizontal, 8)
-            .frame(height: 30)
-            .background(
-                Capsule()
-                    .fill(Color.black)
-                    .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
-                    .shadow(radius: 4)
-            )
-            if !alignRight { Spacer(minLength: 0) }
+            .padding(.horizontal, 12)
+            .frame(width: 300, height: 52)
+            .background(pillGlass)
+            .opacity(music.playing ? 1 : 0.8)
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .animation(.easeInOut(duration: 0.4), value: musicSig)
     }
 
-    /// Carátula en pequeño pegada al notch (lado izquierdo).
-    @ViewBuilder
-    private var coverView: some View {
-        if hasMusic, let art = music.artwork {
-            Image(nsImage: art)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 20, height: 20)
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+    private var pillGlass: some View {
+        // Arriba pegada al borde (como si saliera del notch), abajo redonda.
+        let shape = UnevenRoundedRectangle(
+            cornerRadii: .init(topLeading: 0, bottomLeading: 16, bottomTrailing: 16, topTrailing: 0),
+            style: .continuous
+        )
+        let edge = music.tint ?? .white
+        return ZStack {
+            // Halo exterior del color de la canción (borde de Lumio).
+            shape.fill(edge.opacity(0.5)).blur(radius: 10)
+            shape.fill(Color.black)
+            shape.fill(
+                LinearGradient(
+                    colors: [(music.tint ?? .clear).opacity(0.22), .clear],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
         }
+        .overlay(shape.stroke(edge.opacity(0.55), lineWidth: 1))
+        .shadow(color: edge.opacity(0.45), radius: 10)
     }
 
-    /// Onda con los 2 colores de la canción pegada al notch (lado derecho).
-    @ViewBuilder
-    private var waveView: some View {
-        if hasMusic {
-            if music.playing {
-                SongEQ(
-                    c1: music.tint ?? .white,
-                    c2: music.tint2 ?? music.tint ?? .gray,
-                    barWidth: 3,
-                    maxHeight: 15
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
-            } else {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.5))
-                    .transition(.opacity)
-            }
-        }
+    private func fmt(_ seconds: Double) -> String {
+        let s = Int(seconds.rounded())
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 }
 
@@ -84,25 +102,21 @@ final class NotchLightsController {
     private var panels: [NSPanel] = []
     private var cancellables = Set<AnyCancellable>()
 
-    /// Reconstruye las píldoras para las pantallas actuales. Solo se
-    /// muestran con música (carátula disponible); sin música, nada.
+    /// Reconstruye la píldora para las pantallas actuales. Solo se
+    /// muestra con música (carátula disponible); sin música, nada.
     func rebuild(notches: [ScreenNotch], onTap: @escaping () -> Void) {
         panels.forEach { $0.orderOut(nil) }
         panels = []
         for entry in notches where entry.layout.hasNotch {
             let n = entry.layout.notchRect
-            // Píldora a juego con el notch (casi su altura): se lee como
-            // una extensión suya a cada lado.
-            let h: CGFloat = 30
-            let y = n.minY + (n.height - h) / 2
-            let left = NSRect(x: n.minX - 200, y: y, width: 200, height: h)
-            let right = NSRect(x: n.maxX, y: y, width: 200, height: h)
-            fputs("NOTCH-LIGHTS notch=\(n) left=\(left) right=\(right)\n", stderr)
-            panels.append(makePanel(frame: left, alignRight: true, onTap: onTap))
-            panels.append(makePanel(frame: right, alignRight: false, onTap: onTap))
+            // Centrada en el notch, pegada arriba: como si saliera de él.
+            let w: CGFloat = 300, h: CGFloat = 52
+            let frame = NSRect(x: n.midX - w / 2, y: n.maxY - h, width: w, height: h)
+            fputs("NOTCH-LIGHTS notch=\(n) pill=\(frame)\n", stderr)
+            panels.append(makePanel(frame: frame, onTap: onTap))
         }
         cancellables.removeAll()
-        // Sin música no hay píldora: se ordenan fuera.
+        // Sin música no hay píldora: se ordena fuera.
         let m0 = NotchContext.shared.music
         m0.$title
             .combineLatest(m0.$artwork, m0.$playerLive)
@@ -128,7 +142,7 @@ final class NotchLightsController {
         panels = []
     }
 
-    private func makePanel(frame: NSRect, alignRight: Bool, onTap: @escaping () -> Void) -> NSPanel {
+    private func makePanel(frame: NSRect, onTap: @escaping () -> Void) -> NSPanel {
         let p = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -142,7 +156,7 @@ final class NotchLightsController {
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         p.hidesOnDeactivate = false
         p.ignoresMouseEvents = false
-        p.contentView = FirstMouseHostingView(rootView: NotchLightsView(alignRight: alignRight, onTap: onTap))
+        p.contentView = FirstMouseHostingView(rootView: NotchLightsView(onTap: onTap))
         return p
     }
 }

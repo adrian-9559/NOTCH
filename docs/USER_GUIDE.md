@@ -64,10 +64,10 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 - **Aviso de canción nueva**: al cambiar de canción sale del notch una
   píldora con la carátula en pequeño, el título y el ecualizador; se
   oculta sola a los pocos segundos.
-- **Cover y onda junto al notch**: mientras suena algo, a la izquierda
-  del notch verás la carátula en pequeño y a la derecha la onda de
-  sonido con un degradado de 2 colores de la canción. Al pausar, la onda
-  pasa a ▶ y la carátula se queda.
+- **Cover y onda junto al notch**: mientras suena algo, del notch sale una
+  píldora negra con la carátula, el tiempo y la barra de progreso, con el
+  borde iluminado del color de la canción (como Lumio, sin agentes ni
+  tiempos). Al pausar se atenúa; al cerrar el reproductor desaparece.
 
 ## Pestañas
 
