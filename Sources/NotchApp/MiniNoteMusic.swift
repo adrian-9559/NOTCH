@@ -95,6 +95,17 @@ struct QuickNoteView: View {
     }
 }
 
+/// Mezcla dos colores en RGB (para el degradado del ecualizador).
+func blendColor(_ a: Color, _ b: Color, _ t: Double) -> Color {
+    func comps(_ c: Color) -> (Double, Double, Double) {
+        let ns = NSColor(c).usingColorSpace(.sRGB) ?? .white
+        return (Double(ns.redComponent), Double(ns.greenComponent), Double(ns.blueComponent))
+    }
+    let (r1, g1, b1) = comps(a), (r2, g2, b2) = comps(b)
+    let t = min(1, max(0, t))
+    return Color(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t)
+}
+
 // MARK: - Música: reproducción estilo Lumio + color que ilumina el notch
 // (Music.app / Spotify por AppleScript). Trae carátula, progreso y
 // controles, y extrae el color dominante de la carátula para el lavado
@@ -110,18 +121,21 @@ final class MusicStore: ObservableObject {
     @Published var artwork: NSImage?
     /// Color dominante de la carátula: ilumina el panel del notch.
     @Published var tint: Color?
+    /// Segundo color de la carátula: degradado del ecualizador.
+    @Published var tint2: Color?
 
     private var busy = false
     private var artworkToken = 0
     private var timer: Timer?
 
     init() {
-        // Poll propio cada 1 s: el color ilumina el notch aunque la
-        // pestaña de música no esté seleccionada.
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // Poll propio cada 0.5 s: el color ilumina el notch aunque la
+        // pestaña de música no esté seleccionada, y el aviso de canción
+        // nueva sale casi al instante.
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.poll()
         }
-        timer?.tolerance = 0.25
+        timer?.tolerance = 0.1
         poll()
     }
 
@@ -146,7 +160,10 @@ final class MusicStore: ObservableObject {
                     self.playing = false
                     // Sin reproductor en marcha: el notch vuelve a su color.
                     if !musicApp && !spotifyApp, self.tint != nil {
-                        withAnimation(.easeInOut(duration: 1.1)) { self.tint = nil }
+                        withAnimation(.easeInOut(duration: 1.1)) {
+                            self.tint = nil
+                            self.tint2 = nil
+                        }
                     }
                 }
             }
@@ -164,7 +181,7 @@ final class MusicStore: ObservableObject {
         guard Self.isRunning(app) else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in
             _ = self?.runOut("tell application \"\(app)\" to \(cmd)")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.poll() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.poll() }
         }
     }
 
@@ -251,11 +268,15 @@ final class MusicStore: ObservableObject {
             }
             guard let img = image else { return }
             let color = Self.dominantColor(of: img)
+            let color2 = Self.secondaryColor(of: img)
             DispatchQueue.main.async {
                 guard token == self.artworkToken else { return }
                 self.artwork = img
                 // Lavado del panel animado al color de la canción.
-                withAnimation(.easeInOut(duration: 1.1)) { self.tint = color }
+                withAnimation(.easeInOut(duration: 1.1)) {
+                    self.tint = color
+                    self.tint2 = color2
+                }
             }
         }
     }
@@ -281,6 +302,52 @@ final class MusicStore: ObservableObject {
         // Realce: colores vivos pero no cegadores.
         s = max(0.42, min(s * 1.25, 0.95))
         b = min(max(b, 0.58), 0.82)
+        return Color(hue: h, saturation: s, brightness: b)
+    }
+
+    /// Segundo color de la carátula para el degradado del ecualizador:
+    /// el tono más presente alejado del dominante (como Lumio: dos
+    /// colores vivos de la cover). Nil si la imagen es monocroma.
+    static func secondaryColor(of image: NSImage) -> Color? {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let n = 24
+        guard let ctx = CGContext(
+            data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        ctx.interpolationQuality = .low
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: n, height: n))
+        guard let data = ctx.data else { return nil }
+        let px = data.bindMemory(to: UInt8.self, capacity: n * n * 4)
+        let bins = 12
+        var weight = [Double](repeating: 0, count: bins)
+        var accR = [Double](repeating: 0, count: bins)
+        var accG = [Double](repeating: 0, count: bins)
+        var accB = [Double](repeating: 0, count: bins)
+        for i in 0..<(n * n) {
+            let r = Double(px[i * 4]) / 255, g = Double(px[i * 4 + 1]) / 255, b = Double(px[i * 4 + 2]) / 255
+            var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
+            NSColor(srgbRed: r, green: g, blue: b, alpha: 1).getHue(&h, saturation: &s, brightness: &v, alpha: &a)
+            guard s > 0.18, v > 0.12, v < 0.97 else { continue }
+            let bin = min(bins - 1, Int(h * CGFloat(bins)))
+            let w = Double(s) * (0.4 + 0.6 * Double(v))
+            weight[bin] += w
+            accR[bin] += r * w; accG[bin] += g * w; accB[bin] += b * w
+        }
+        guard let top = weight.indices.max(by: { weight[$0] < weight[$1] }), weight[top] > 0 else { return nil }
+        // El mejor tono a distancia circular >= 3 casillas del dominante.
+        let dist = { (a: Int, b: Int) in min((a - b + bins) % bins, (b - a + bins) % bins) }
+        let second = weight.indices
+            .filter { dist($0, top) >= 3 }
+            .max(by: { weight[$0] < weight[$1] })
+        guard let bin = second, weight[bin] > weight[top] * 0.12 else { return nil }
+        let w = weight[bin]
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        NSColor(srgbRed: accR[bin] / w, green: accG[bin] / w, blue: accB[bin] / w, alpha: 1)
+            .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        s = max(0.5, min(s * 1.3, 1))
+        b = min(max(b, 0.6), 0.9)
         return Color(hue: h, saturation: s, brightness: b)
     }
 

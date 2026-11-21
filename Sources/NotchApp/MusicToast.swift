@@ -10,19 +10,23 @@ extension Notification.Name {
 /// Aviso estilo Lumio: al cambiar la canción sale del notch una píldora
 /// pequeña con la carátula, el título y el símbolo de reproducción.
 /// Se oculta sola a los pocos segundos. Solo luz, sin clics.
-/// Ecualizador vivo: cada barra oscila de forma continua con su propio
-/// periodo y fase (ease-in-out + repeatForever), como una salida suave
-/// de modal en vez de saltos discretos por timer.
-struct ToastEQ: View {
+/// Ecualizador vivo con degradado de los 2 colores de la canción: cada
+/// barra oscila de forma continua con su propio periodo y fase
+/// (ease-in-out + repeatForever), como una salida suave de modal.
+struct SongEQ: View {
+    var c1: Color
+    var c2: Color
+    var barWidth: CGFloat = 3
+    var maxHeight: CGFloat = 16
     @State private var on = false
-    private let maxH: [CGFloat] = [9, 15, 11, 16]
+    private let tops: [CGFloat] = [9, 15, 11, 16]
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 2.5) {
             ForEach(0..<4, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.white.opacity(0.9))
-                    .frame(width: 3, height: on ? maxH[i] : 4)
+                    .fill(blendColor(c1, c2, Double(i) / 3))
+                    .frame(width: barWidth, height: on ? tops[i] * maxHeight / 16 : 4)
                     .animation(
                         .easeInOut(duration: 0.55 + Double(i) * 0.16)
                             .delay(Double(i) * 0.09)
@@ -31,7 +35,7 @@ struct ToastEQ: View {
                     )
             }
         }
-        .frame(height: 16, alignment: .bottom)
+        .frame(height: maxHeight, alignment: .bottom)
         .onAppear { on = true }
     }
 }
@@ -91,9 +95,9 @@ struct MusicToastView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
-            // Símbolo de reproducción: ecualizador vivo si suena.
+            // Símbolo de reproducción: ecualizador con los colores.
             if music.playing {
-                ToastEQ()
+                SongEQ(c1: music.tint ?? .white, c2: music.tint2 ?? music.tint ?? .gray)
             } else {
                 Image(systemName: "play.fill")
                     .font(.system(size: 13, weight: .semibold))
