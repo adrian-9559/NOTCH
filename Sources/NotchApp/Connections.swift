@@ -197,12 +197,16 @@ final class WeatherStore: ObservableObject {
         }
     }
 
-    /// Recarga el parte si hay ciudad guardada (sin tocar permisos).
+    /// Recarga el parte sin tocar permisos: ciudad guardada y, si no,
+    /// respaldo por zona horaria (así el notch nunca queda sin datos).
     func silentRefresh() {
-        guard let lat = savedLat,
-              let lon = UserDefaults.standard.object(forKey: "notchWeatherLon") as? Double else { return }
-        let city = UserDefaults.standard.string(forKey: "notchWeatherCity") ?? ""
-        fetch(lat: lat, lon: lon, place: city)
+        if let lat = savedLat,
+           let lon = UserDefaults.standard.object(forKey: "notchWeatherLon") as? Double {
+            let city = UserDefaults.standard.string(forKey: "notchWeatherCity") ?? ""
+            fetch(lat: lat, lon: lon, place: city)
+            return
+        }
+        _ = tzFallbackFetch()
     }
 
     private var savedLat: Double? {
@@ -236,14 +240,65 @@ final class WeatherStore: ObservableObject {
             return
         }
         guard NotchSettings.shared.useLocation else {
-            // Sin lugar todavía: mostrar el estado "busca una ciudad".
-            error = true
+            // Sin ubicación activada: respaldo por zona horaria.
+            if !tzFallbackFetch() { error = true }
+            return
+        }
+        // Sin bundle (binario de desarrollo) la ubicación no puede
+        // pedirse: se usa el respaldo por zona horaria.
+        guard Bundle.main.bundleURL.pathExtension == "app" else {
+            if !tzFallbackFetch() { error = true }
             return
         }
         // Automático: la primera vez macOS pide el consentimiento de
-        // ubicación; si se deniega, queda el estado de búsqueda.
+        // ubicación; si se deniega, respaldo por zona horaria.
         useCurrentLocation()
     }
+
+    /// Respaldo por zona horaria: ciudades por IANA para que el notch
+    /// tenga clima aunque no haya ciudad guardada ni ubicación
+    /// (el binario de desarrollo no puede pedir permisos de CLLocation).
+    /// No se guarda: si luego hay ciudad o ubicación, mandan ellas.
+    func tzFallbackFetch() -> Bool {
+        let id = TimeZone.current.identifier
+        guard let hit = Self.tzCities[id] else { return false }
+        fetch(lat: hit.lat, lon: hit.lon, place: hit.city)
+        return true
+    }
+
+    private static let tzCities: [String: (city: String, lat: Double, lon: Double)] = [
+        "Europe/Madrid": ("Madrid", 40.4168, -3.7038),
+        "Atlantic/Canary": ("Las Palmas", 28.1235, -15.4363),
+        "Europe/London": ("Londres", 51.5074, -0.1278),
+        "Europe/Paris": ("París", 48.8566, 2.3522),
+        "Europe/Berlin": ("Berlín", 52.52, 13.405),
+        "Europe/Rome": ("Roma", 41.9028, 12.4964),
+        "Europe/Lisbon": ("Lisboa", 38.7223, -9.1393),
+        "Europe/Amsterdam": ("Ámsterdam", 52.3676, 4.9041),
+        "Europe/Moscow": ("Moscú", 55.7558, 37.6173),
+        "America/New_York": ("Nueva York", 40.7128, -74.006),
+        "America/Chicago": ("Chicago", 41.8781, -87.6298),
+        "America/Denver": ("Denver", 39.7392, -104.9903),
+        "America/Los_Angeles": ("Los Ángeles", 34.0522, -118.2437),
+        "America/Mexico_City": ("Ciudad de México", 19.4326, -99.1332),
+        "America/Bogota": ("Bogotá", 4.711, -74.0721),
+        "America/Lima": ("Lima", -12.0464, -77.0428),
+        "America/Santiago": ("Santiago", -33.4489, -70.6693),
+        "America/Argentina/Buenos_Aires": ("Buenos Aires", -34.6037, -58.3816),
+        "America/Sao_Paulo": ("São Paulo", -23.5505, -46.6333),
+        "America/Toronto": ("Toronto", 43.6532, -79.3832),
+        "Asia/Tokyo": ("Tokio", 35.6762, 139.6503),
+        "Asia/Seoul": ("Seúl", 37.5665, 126.978),
+        "Asia/Shanghai": ("Shanghái", 31.2304, 121.4737),
+        "Asia/Hong_Kong": ("Hong Kong", 22.3193, 114.1694),
+        "Asia/Singapore": ("Singapur", 1.3521, 103.8198),
+        "Asia/Kolkata": ("Mumbai", 19.076, 72.8777),
+        "Asia/Dubai": ("Dubái", 25.2048, 55.2708),
+        "Australia/Sydney": ("Sídney", -33.8688, 151.2093),
+        "Pacific/Auckland": ("Auckland", -36.8485, 174.7633),
+        "Africa/Cairo": ("El Cairo", 30.0444, 31.2357),
+        "Africa/Johannesburg": ("Johannesburgo", -26.2041, 28.0473),
+    ]
 
     // MARK: - Lugares predeterminados
 
@@ -285,7 +340,13 @@ final class WeatherStore: ObservableObject {
         loc.requestOnce { [weak self] c in
             guard let self else { return }
             guard let c else {
-                DispatchQueue.main.async { self.loading = false; self.error = self.place.isEmpty && self.temp == nil }
+                DispatchQueue.main.async {
+                    self.loading = false
+                    // Sin ubicación (denegada): respaldo por zona.
+                    if !self.tzFallbackFetch() {
+                        self.error = self.place.isEmpty && self.temp == nil
+                    }
+                }
                 return
             }
             self.reverseName(lat: c.latitude, lon: c.longitude) { name in
@@ -403,6 +464,106 @@ final class WeatherStore: ObservableObject {
     }
 }
 
+// MARK: - Icono del parte a color
+
+/// Icono compuesto y multicolor: nube blanca/gris según la intensidad,
+/// gotas azules, nieve blanca, rayo ámbar, sol amarillo… Se usa en la
+/// pestaña Tiempo y en el notch cerrado (a diferencia del SF Symbol
+/// plano, cada elemento lleva su color).
+struct WeatherGlyph: View {
+    var code: Int
+    var size: CGFloat = 16
+
+    private var hasCloud: Bool { ![0, 1].contains(code) }
+
+    /// La nube se oscurece con la intensidad de la precipitación.
+    private var cloud: Color {
+        switch code {
+        case 3: return Color(hex: "9AA7B8")
+        case 45, 48: return Color(hex: "8B97A8")
+        case 51, 53, 55, 56, 57, 80, 81, 82: return Color(hex: "B9C2CE")
+        case 61, 63, 66, 67: return Color(hex: "8593A6")
+        case 65, 71, 73, 75, 77, 85, 86: return Color(hex: "6E7C90")
+        case 95, 96, 99: return Color(hex: "59637A")
+        default: return Color(hex: "D7DEE8")
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            // Sol (despejado y parcial): amarillo detrás de la nube.
+            if code == 0 || code == 1 || code == 2 {
+                Image(systemName: "sun.max.fill")
+                    .font(.system(size: size * (code == 2 ? 0.60 : 0.95), weight: .medium))
+                    .foregroundStyle(Color(hex: "F2B33D"))
+                    .offset(x: code == 2 ? -size * 0.26 : 0,
+                            y: code == 2 ? -size * 0.26 : 0)
+                    .shadow(color: Color(hex: "F2B33D").opacity(0.55), radius: size * 0.22)
+            }
+            if hasCloud {
+                Image(systemName: "cloud.fill")
+                    .font(.system(size: size * 0.78, weight: .medium))
+                    .foregroundStyle(cloud)
+                    .offset(y: code == 2 ? size * 0.12 : (precipVisible ? size * 0.02 : 0))
+                    .shadow(color: .black.opacity(0.25), radius: size * 0.14)
+            }
+            precip
+        }
+        .frame(width: size * 1.4, height: size * 1.4)
+    }
+
+    private var precipVisible: Bool {
+        switch code {
+        case 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99:
+            return true
+        default: return false
+        }
+    }
+
+    @ViewBuilder
+    private var precip: some View {
+        switch code {
+        case 51, 53, 55:
+            drops(count: 2, color: Color(hex: "4C8FD8"))
+        case 56, 57, 66, 67:
+            drops(count: 2, color: Color(hex: "7FC4E8"))
+        case 61, 63, 65, 80, 81, 82:
+            drops(count: 3, color: Color(hex: "4C8FD8"))
+        case 71, 73, 75, 77, 85, 86:
+            Image(systemName: "snowflake")
+                .font(.system(size: size * 0.36, weight: .bold))
+                .foregroundStyle(.white)
+                .offset(y: size * 0.42)
+                .shadow(color: .white.opacity(0.45), radius: size * 0.12)
+        case 95, 96, 99:
+            Image(systemName: "bolt.fill")
+                .font(.system(size: size * 0.46, weight: .bold))
+                .foregroundStyle(Color(hex: "F2B33D"))
+                .offset(y: size * 0.44)
+        case 45, 48:
+            VStack(spacing: size * 0.09) {
+                Capsule().fill(cloud).frame(width: size * 0.58, height: size * 0.09)
+                Capsule().fill(cloud.opacity(0.75)).frame(width: size * 0.42, height: size * 0.09)
+            }
+            .offset(y: size * 0.40)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func drops(count: Int, color: Color) -> some View {
+        HStack(spacing: size * 0.13) {
+            ForEach(0..<count, id: \.self) { i in
+                Image(systemName: "drop.fill")
+                    .font(.system(size: size * 0.23, weight: .bold))
+                    .foregroundStyle(color)
+                    .offset(y: i % 2 == 1 ? size * 0.10 : 0)
+            }
+        }
+        .offset(y: size * 0.44)
+    }
+}
+
 // MARK: - Pestaña Tiempo
 
 /// Hora local del lugar + clima (Open-Meteo, sin clave). Ubicación con
@@ -513,10 +674,8 @@ struct WeatherView: View {
                     Spacer(minLength: 4)
                     VStack(alignment: .trailing, spacing: 0) {
                         if let c = store.code {
-                            Image(systemName: iconName(c))
-                                .font(.system(size: 34))
-                                .foregroundStyle(tint)
-                                .shadow(color: tint.opacity(0.5), radius: 12)
+                            WeatherGlyph(code: c, size: 34)
+                                .shadow(color: tint.opacity(0.45), radius: 10)
                                 .padding(.bottom, 2)
                         }
                         if let t = store.temp {
@@ -586,9 +745,7 @@ struct WeatherView: View {
                             Text(i == 0 ? tr("wthr.now") : hourString(h.date))
                                 .font(.notchMono(9))
                                 .foregroundStyle(i == 0 ? settings.accent : Color.white.opacity(0.5))
-                            Image(systemName: iconName(h.code))
-                                .font(.system(size: 14))
-                                .foregroundStyle(i == 0 ? tint : tint.opacity(0.85))
+                            WeatherGlyph(code: h.code, size: 17)
                             Text("\(Int(h.temp.rounded()))°")
                                 .font(.notchMono(12))
                                 .foregroundStyle(.white.opacity(0.92))
@@ -640,9 +797,7 @@ struct WeatherView: View {
                         .font(.system(size: 12, weight: i == 0 ? .semibold : .regular))
                         .foregroundStyle(Color.white.opacity(i == 0 ? 0.95 : 0.8))
                         .frame(width: 84, alignment: .leading)
-                    Image(systemName: iconName(d.code))
-                        .font(.system(size: 12))
-                        .foregroundStyle(tint)
+                    WeatherGlyph(code: d.code, size: 15)
                         .frame(width: 18)
                     Text("\(Int(d.tmin.rounded()))°")
                         .font(.notchMono(11))
@@ -739,24 +894,6 @@ struct WeatherView: View {
         return NotchDateFmt.weekdayFull.string(from: d).capitalized
     }
 
-    private func iconName(_ code: Int) -> String {
-        weatherIcon(code)
-    }
-}
-
-/// Icono SF del parte: compartido por la pestaña Tiempo y el notch.
-func weatherIcon(_ code: Int) -> String {
-    switch code {
-        case 0, 1: return "sun.max.fill"
-        case 2: return "cloud.sun.fill"
-        case 3: return "cloud.fill"
-        case 45, 48: return "cloud.fog.fill"
-        case 51, 53, 55, 56, 57: return "cloud.drizzle.fill"
-        case 61, 63, 65, 66, 67, 80, 81, 82: return "cloud.rain.fill"
-        case 71, 73, 75, 77, 85, 86: return "cloud.snow.fill"
-        case 95, 96, 99: return "cloud.bolt.rain.fill"
-        default: return "cloud.fill"
-    }
 }
 
 /// Tinte del estado del tiempo (hero, contornos y notch cerrado).

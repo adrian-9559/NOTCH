@@ -147,10 +147,12 @@ final class NotchLightsController {
         // Sin música no hay píldora: se ordena fuera.
         let m0 = NotchContext.shared.music
         m0.$title
-            .combineLatest(m0.$artwork, m0.$playerLive)
+            .combineLatest(m0.$artwork, m0.$playerLive, m0.$playing)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] title, art, live in
-                self?.hasSong = !title.isEmpty && art != nil && live
+            .sink { [weak self] title, art, live, playing in
+                // Píldora SOLO con música sonando: en pausa o parada,
+                // el notch lleva el clima (lo pidió el usuario).
+                self?.hasSong = !title.isEmpty && art != nil && live && playing
                 self?.updateVisibility()
             }
             .store(in: &cancellables)
@@ -272,9 +274,7 @@ struct NotchWeatherStripView: View {
     var body: some View {
         HStack {
             if w.temp != nil, let c = w.code {
-                Image(systemName: weatherIcon(c))
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(weatherTint(c, fallback: NotchSettings.shared.accent))
+                WeatherGlyph(code: c, size: 16)
             }
             Spacer(minLength: 0)
             if let t = w.temp {

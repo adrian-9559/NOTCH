@@ -20,6 +20,34 @@ public enum ProcessMonitor {
         } catch { return SystemSnapshot(processes: []) }
     }
 
+    /// Marcas de OTROS agentes/CLIs que no están en los16: si corren y
+    /// ningún detector los reclama, se avisan por stderr (auditoría).
+    public static let otherAgentBrands = [
+        "aider", "goose", "windsurf", "trae", "roo-code", "roo code",
+        "continue.dev", "sourcegraph cody", "tabnine", "codeium",
+        "amazon q", "devin", "augment", "claude-dev", "factory",
+    ]
+
+    /// Procesos con marca conocida que NINGÚN detector reclama.
+    /// Devuelve líneas "marca: comando" (dedupe por marca).
+    public static func unmappedAgents(in snap: SystemSnapshot) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        let detectors = AllDetectors.all
+        for p in snap.processes {
+            let cmd = p.command
+            guard let brand = otherAgentBrands.first(where: { cmd.contains($0) }) else { continue }
+            let claimed = detectors.contains { d in
+                !d.processExclusions.contains(where: { cmd.contains($0) })
+                    && d.processHints.contains(where: { cmd.contains($0) })
+            }
+            guard !claimed else { continue }
+            guard seen.insert(brand).inserted else { continue }
+            out.append("\(brand): \(String(cmd.prefix(140)))")
+        }
+        return out
+    }
+
     static func parsePsOutput(_ out: String) -> SystemSnapshot {
         var rows: [LiveProcess] = []
         for line in out.split(separator: "\n") {

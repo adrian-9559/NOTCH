@@ -10,6 +10,8 @@ public final class SessionStore: ObservableObject {
 
     /// Hook para historial (lo usa HistoryStore en el lote de mini-features).
     public var onChange: ([AgentSession]) -> Void = { _ in }
+    /// Snapshot crudo de procesos (auditoría de agentes sin mapear).
+    public var onSnapshot: ((SystemSnapshot) -> Void)?
 
     private let engine: MonitorEngine
     /// Evita solapar pasadas (el poll tarda y llega cada2 s).
@@ -27,7 +29,10 @@ public final class SessionStore: ObservableObject {
         refreshing = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let fresh = self.engine.poll()
+            // Un solo `ps` para detectar Y auditar (sin lanzarlo dos veces).
+            let snap = ProcessMonitor.snapshot()
+            let fresh = self.engine.poll(snapshot: snap)
+            self.onSnapshot?(snap)
             DispatchQueue.main.async {
                 self.refreshing = false
                 self.apply(fresh)

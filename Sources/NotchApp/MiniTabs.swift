@@ -27,11 +27,21 @@ enum MiniTabs {
             return [
                 (title: NotchTab.shelf.rawValue, view: AnyView(ShelfView(store: store, shelf: ctx.shelf))),
                 (title: NotchTab.focus.rawValue, view: AnyView(HStack(alignment: .top, spacing: 12) {
-                    TimerView(store: ctx.focusTimer)
-                        .frame(maxWidth: .infinity)
+                    VStack(alignment: .leading, spacing: 8) {
+                        NotchTag(icon: "timer", text: tr("focus.timer"),
+                                 color: Color(hex: "2F9E6E"))
+                        TimerView(store: ctx.focusTimer)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .frame(maxWidth: .infinity)
                     Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1)
-                    AwakeView(store: ctx.awake, sessions: store)
-                        .frame(maxWidth: .infinity)
+                    VStack(alignment: .leading, spacing: 8) {
+                        NotchTag(icon: "sun.max.fill", text: tr("focus.awake"),
+                                 color: NotchSettings.shared.accent)
+                        AwakeView(store: ctx.awake, sessions: store)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .frame(maxWidth: .infinity)
                 })),
                 (title: NotchTab.mac.rawValue, view: AnyView(StatsView(sessions: store))),
                 (title: NotchTab.tiempo.rawValue, view: AnyView(WeatherView())),

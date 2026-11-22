@@ -47,6 +47,7 @@ struct NotchRootView: View {
     /// Altura mostrada del área de contenido (se anima a mano: si se
     /// usara withAnimation, la ventana saltaría al final de golpe).
     @State private var shownHeight: CGFloat = 300
+    @State private var contentHeight: CGFloat = 0
     /// Altura natural medida de la pestaña seleccionada (con tope).
     @State private var targetHeight: CGFloat = 300
     /// La primera medición se aplica sin animación (al arrancar).
@@ -185,10 +186,23 @@ struct NotchRootView: View {
                                 )
                         }
                         .frame(height: shownHeight)
+                        // Aviso sutil de que hay más contenido abajo.
+                        .overlay(alignment: .bottom) {
+                            if contentHeight > shownHeight + 8 {
+                                LinearGradient(
+                                    colors: [.clear, Color.black.opacity(0.5)],
+                                    startPoint: .top, endPoint: .bottom
+                                )
+                                .frame(height: 24)
+                                .allowsHitTesting(false)
+                                .transition(.opacity)
+                            }
+                        }
                         .padding(.top, 6)
                         .padding(.bottom, 14)
                         .padding(.horizontal, 16)
                         .onPreferenceChange(ContentHeightKey.self) { h in
+                            contentHeight = h
                             let clamped = min(max(h, minContentHeight), maxContentHeight)
                             guard abs(clamped - targetHeight) > 0.5 else { return }
                             targetHeight = clamped

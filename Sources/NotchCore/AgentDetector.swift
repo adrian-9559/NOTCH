@@ -5,6 +5,9 @@ public protocol AgentDetector: Sendable {
     var agent: AgentID { get }
     /// Nombres de proceso a buscar en `ps` (minúsculas, match por contains).
     var processHints: [String] { get }
+    /// Basenames EXACTOS del binario (minúsculas): para CLIs ambiguos
+    /// tipo `pi` donde un contains cascaría con `pip`, `pix`…
+    var processBasenames: [String] { get }
     /// Exclusiones (minúsculas): si el comando las contiene, se descarta.
     /// Evita falsos positivos como CursorUIViewService de Apple.
     var processExclusions: [String] { get }
@@ -15,12 +18,20 @@ public protocol AgentDetector: Sendable {
 
 public extension AgentDetector {
     var processExclusions: [String] { [] }
+    var processBasenames: [String] { [] }
 
     func detect(with snapshot: SystemSnapshot) -> [AgentSession] {
+        // Basename del binario: primer token del comando, última barra.
+        func base(_ command: String) -> String {
+            let first = command.split(separator: " ").first.map(String.init) ?? command
+            return (first.split(separator: "/").last.map(String.init) ?? first).lowercased()
+        }
         let procs = snapshot.processes.filter { p in
             let cmd = p.command.lowercased()
             guard !processExclusions.contains(where: { cmd.contains($0) }) else { return false }
-            return processHints.contains { hint in cmd.contains(hint) }
+            if processHints.contains(where: { cmd.contains($0) }) { return true }
+            let b = base(cmd)
+            return processBasenames.contains { b == $0 }
         }
         let files = sessionPaths.flatMap { expandSessionFiles($0) }
 
@@ -41,13 +52,18 @@ public extension AgentDetector {
 
         let status: AgentStatus
         let detail: String?
-        if let waiting = checkWaitingNeedle(in: files), procs.isEmpty == false {
+        let freshFiles = files.contains { $0.mtime.timeIntervalSinceNow > -60 }
+        if let waiting = checkWaitingNeedle(in: files), !procs.isEmpty || freshFiles {
             status = .waiting; detail = waiting
         } else if !procs.isEmpty, (cpu > 5.0 || isRecent(latestMtime, within: 60)) {
             status = .working; detail = latestPath
         } else if !procs.isEmpty {
             status = isRecent(latestMtime, within: 300) ? .done : .idle
             detail = latestPath
+        } else if isRecent(latestMtime, within: 60) {
+            // Sin proceso reconocido pero el log se está escribiendo
+            // AHORA: en uso (agentes de extensión cuyo host no matchea).
+            status = .working; detail = latestPath
         } else if isRecent(latestMtime, within: 600) {
             // Había actividad reciente pero el proceso murió.
             status = .crashed; detail = latestPath

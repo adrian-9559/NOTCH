@@ -28,9 +28,7 @@ struct AgentsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text(tr("agents.title"))
-                    .font(.notchMono(11))
-                    .foregroundStyle(.secondary)
+                NotchTag(icon: "sparkles", text: tr("agents.title"), color: settings.accent)
                 if !store.active.isEmpty {
                     HStack(spacing: 4) {
                         Circle().fill(Color.green).frame(width: 6, height: 6)
@@ -42,7 +40,6 @@ struct AgentsView: View {
                     .padding(.horizontal, 7).padding(.vertical, 2)
                     .background(Capsule().fill(Color.green.opacity(0.12)))
                 }
-                Spacer()
             }
             if waiting.isEmpty && working.isEmpty && recent.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -56,28 +53,21 @@ struct AgentsView: View {
                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
             }
             if !waiting.isEmpty {
-                Text(tr("agents.need"))
-                    .font(.notchMono(10))
-                    .foregroundStyle(settings.accent)
-                    .kerning(1.2)
+                NotchTag(icon: "hand.raised.fill", text: tr("agents.need"), color: settings.accent)
                 ForEach(waiting, id: \.agent) { s in
                     waitingCard(s)
                 }
             }
             if !working.isEmpty {
-                Text(tr("agents.working"))
-                    .font(.notchMono(10))
-                    .foregroundStyle(Color.white.opacity(0.5))
-                    .kerning(1.2)
+                NotchTag(icon: "arrow.triangle.2.circlepath", text: tr("agents.working"),
+                         color: Color(hex: "4C8FD8"))
                 ForEach(working, id: \.agent) { s in
                     loadingRow(s)
                 }
             }
             if !recent.isEmpty {
-                Text(tr("agents.recent"))
-                    .font(.notchMono(10))
-                    .foregroundStyle(Color.white.opacity(0.5))
-                    .kerning(1.2)
+                NotchTag(icon: "clock.arrow.circlepath", text: tr("agents.recent"),
+                         color: Color.white.opacity(0.55))
                 ForEach(recent, id: \.agent) { s in
                     recentRow(s)
                 }

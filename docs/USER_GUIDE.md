@@ -71,8 +71,14 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 - **Cover y onda junto al notch**: mientras suena algo, del notch sale una
   píldora negra total con la carátula en un extremo, el tiempo y la barra
   en el centro y la onda en el otro extremo, con el color solo abajo
-  (arriba negro puro). Se oculta al abrir el panel. Al pausar se
-  atenúa; al cerrar el reproductor desaparece.
+  (arriba negro puro). Se oculta al abrir el panel. **Solo se muestra con
+  música sonando**: al pausar o parar, la píldora se va y…
+- **Clima en el notch cerrado**: …el notch pasa a mostrar el **icono del
+  parte a la izquierda** (sol ámbar, nube gris según la intensidad, gotas
+  azules, nieve blanca, rayo) y **la temperatura a la derecha**, con
+  fundido. Los datos vienen de tu ciudad guardada, de la ubicación
+  (si la concedes) o, sin más, de la **zona horaria del sistema**
+  (Madrid, Londres, Nueva York…); se refresca cada15 min.
 
 ## Pestañas
 
@@ -81,7 +87,7 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 | Shelf | Dropzone punteada estilo Lumio (**kept for a day**: lo de 24 h se retira solo, el original no se toca). Por archivo: miniatura, **AirDrop**, **Zip**, **JPG**, **PDF**, Ver, Path y **To agent** (lo entrega a la sesión que elijas). Las capturas entran solas. |
 | Focus | **Timer** con reloj grande (presets 15/25/50/90, pausa y **Cronómetro**) + descanso de ojos al final, y **Keep awake** con su **relojito ajustable** (stepper de minutos + presets, cuenta atrás y modos ∞/Auto). Evita el reposo de **Pantalla** y/o el **Salvapantallas** a libre elección. |
 | Tiempo | **Hora local + clima** (Open-Meteo, sin clave): temperatura, estado, viento, humedad, 12 h y 5 días. Con tu **ubicación** (consentida) o buscando ciudad (se recuerda). |
-| Mac | Tarjeta unificada de **MEDICIONES**: anillos de **CPU en vivo** (`E·P` + pico), **memoria** (`usada/total` + presión y swap) y **batería** (logo con carga + salud, ciclos, potencia y tiempo restante —estimado si macOS no lo da—). Debajo: **qué carga el Mac** (top procesos; toca uno para ver PID/MEM/usuario/tiempo y **Terminar**lo), **AGENT SERVERS** (puertos en escucha con Open/Stop, mapeados al agente dueño) y **LIMPIEZA** (basura de Claude/Codex/OpenCode/Cursor/VS Code a la papelera, solo con todo parado). Secciones plegables. Abajo, la huella del propio NOTCH. |
+| Mac | Tarjeta unificada de **MEDICIONES**: anillos de **CPU en vivo** (`E·P` + pico), **memoria** (`usada/total` + presión y swap) y **batería** (logo con carga + salud, ciclos, potencia y tiempo restante —estimado si macOS no lo da—). Debajo: **qué carga el Mac** (top procesos; toca uno para ver PID/MEM/usuario/tiempo y **Terminar**lo), **AGENT SERVERS** (puertos en escucha con Open/Stop, mapeados al agente dueño) y **LIMPIEZA** con niveles — ✓ seguro (temporales y logs), ↓ se re-descarga (cachés de Puppeteer, Playwright, Serena, Codegraph…), ⚠ destructivo (base de datos de OpenCode con **VACUUM** sin perder sesiones; worktree solo si `git status` está limpio; ficheros enormes con **borrado definitivo** y doble confirmación). «Limpiar todo» jamás toca lo destructivo. Solo con todo parado. Secciones plegables. Abajo, la huella del propio NOTCH. |
 | Actividad | **Heatmap GitHub de 12 semanas** con meses y leyenda Menos/Más, total gigante con racha y mejor marca, y **ranking por agente** con barras proporcionales. Todo sale del historial local. |
 | Agentes | **Respuestas en un sitio**: lista en vivo — los que trabajan salen **cargando** (spinner + %CPU), y el que te **pregunta** sale expandido con la pregunta y sus respuestas (**Permitir** / escribir / **Enviar** / **Abrir**). Si el notch está cerrado, sale la píldora **"X te necesita"**: tócala y el notch se abre aquí. Anti-spam: el aviso de fin solo sale tras 45 s quieto y no se repite en el mismo request. |
 | Música | Reproducción estilo Lumio: carátula con vinilo asomando, título, barra de progreso con tiempos y controles ⏮ ⏸ ⏭. **El panel se ilumina con el color de la canción** (extraído de la carátula). Music.app y Spotify. |
@@ -98,6 +104,13 @@ REPO=adrian-9559/NOTCH sh Scripts/install.sh
 - Conexiones: ninguna (salvo la descarga inicial). Tus datos no salen del Mac.
 
 ## Solución de problemas
+
+- **No veo a un agente (u otro CLI de IA) en el panel**: NOTCH audita
+  los procesos y escribe en su registro las marcas que ningún detector
+  reclama: `grep NOTCH-UNMAPPED ~/..../notch.log` (salida estándar de la
+  app). Si aparece ahí el tuyo, es un hueco de la tabla de detección. Los
+  agentes solo-por-fichero (extensiones de VS Code) ahora cuentan como
+  **en uso** mientras su log se esté escribiendo.
 
 - **No detecta mi agente**: comprueba que su proceso esté corriendo y que
   tenga archivos de sesión recientes (`swift run NotchApp -- --monitor-once`

@@ -1146,7 +1146,7 @@ private struct SettingsCardBackground: View {
 
 /// Novedades versionadas (se muestra en Ajustes → Novedades).
 private enum NotchNews {
-    static let version = "v0.6.0"
+    static let version = "v0.7.0"
 
     struct Release: Identifiable {
         let version: String
@@ -1156,6 +1156,8 @@ private enum NotchNews {
     }
 
     static let releases: [Release] = [
+        Release(version: "v0.7.0", date: "22 nov 2026", bullets: [
+            "news.v070a", "news.v070b", "news.v070c", "news.v070d"]),
         Release(version: "v0.6.0", date: "22 nov 2026", bullets: [
             "news.v060a", "news.v060b", "news.v060c", "news.v060d"]),
         Release(version: "v0.5.0", date: "21 nov 2026", bullets: [

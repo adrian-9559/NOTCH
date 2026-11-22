@@ -34,8 +34,9 @@ struct WaitingToastView: View {
         // El negro puro (OpenCode) no se ve: círculo claro con ? oscuro.
         let dark = isDarkHex(state.colorHex)
         return HStack(spacing: 10) {
+            // Avatar tipo app (cuadrado redondeado) con ?.
             ZStack {
-                Circle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(dark ? Color.white.opacity(0.9) : (state.colorHex.map { Color(hex: $0) } ?? Color.gray))
                     .frame(width: 30, height: 30)
                 Image(systemName: "questionmark")
@@ -43,10 +44,17 @@ struct WaitingToastView: View {
                     .foregroundStyle(dark ? Color.black : Color.white)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(state.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(state.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(state.time)
+                        .font(.notchMono(9))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                        .monospacedDigit()
+                }
                 Text(state.subtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.white.opacity(0.7))
@@ -90,6 +98,8 @@ final class WaitingToastState: ObservableObject {
     @Published var title = ""
     @Published var subtitle = ""
     @Published var colorHex: String?
+    /// Hora del mensaje (estilo notificación), se fija al mostrar.
+    @Published var time = ""
     private var hideWork: DispatchWorkItem?
     private var gen = 0
 
@@ -101,6 +111,7 @@ final class WaitingToastState: ObservableObject {
         self.title = title
         self.subtitle = subtitle
         self.colorHex = colorHex
+        self.time = NotchDateFmt.hourMinute.string(from: Date())
         visible = true
         let secs = NotchSettings.shared.waitToastSeconds
         let w = DispatchWorkItem { [weak self] in

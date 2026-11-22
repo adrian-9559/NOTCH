@@ -2,6 +2,7 @@
 import AppKit
 import Combine
 import Darwin
+import NotchCore
 import SwiftUI
 
 // MARK: - Stats estilo Lumio: anillos simples, "what loads the mac",
@@ -525,19 +526,22 @@ struct StatsView: View {
             NotchTag(icon: "gauge.with.needle", text: tr("mac.measurements"),
                      color: Color(hex: "2F9E6E"), trailing: chip)
             HStack(alignment: .top, spacing: 8) {
-                // Carril CPU (bloque propio, sin divisor).
+                // Carril CPU (bloque propio, sin divisor). Altura fija
+                // igual que el de memoria; la batería queda libre.
                 VStack(spacing: 6) {
                     LaneGauge(value: "\(Int((snap.cpuUser + snap.cpuSys).rounded()))%",
                               fraction: cpuFrac, color: severityColor(fraction: cpuFrac))
                     Text("CPU").font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
                     Sparkline(values: cpuHist, color: severityColor(fraction: cpuFrac))
+                    Spacer(minLength: 0)
                     Text("E \(eCores) · P \(pCores) · \(tr("mac.peak", Int(peakCpu.rounded())))")
                         .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
                 }
+                .frame(height: 180)
                 .frame(maxWidth: .infinity)
                 .padding(10)
                 .background(laneBg)
-                // Carril memoria (bloque propio, sin divisor).
+                // Carril memoria: misma altura que CPU.
                 VStack(spacing: 6) {
                     LaneGauge(value: "\(Int((memFrac * 100).rounded()))%",
                               fraction: memFrac, color: severityColor(fraction: memFrac))
@@ -551,10 +555,11 @@ struct StatsView: View {
                             .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
                     }
                 }
+                .frame(height: 180)
                 .frame(maxWidth: .infinity)
                 .padding(10)
                 .background(laneBg)
-                // Carril batería (mismo material que los otros dos).
+                // Carril batería: NO se iguala (queda a su altura).
                 batteryCard.frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -932,97 +937,216 @@ struct LaneGauge: View {
 
 /// Una papelera candidata: etiqueta, rutas y tamaño medido.
 struct JunkRow: Identifiable {
+    enum Kind {
+        case trash       // papelera normal
+        case vacuum      // compactar SQLite sin perder datos
+        case worktree    // exige git status limpio
+        case huge        // fichero enorme: papelera o borrado definitivo
+    }
     let id: String
     var agent: String
     var label: String
     var paths: [String]
     var bytes: Int64 = 0
+    var level: JunkLevel = .safe
+    var kind: Kind = .trash
 }
 
-/// Basura regenerable de los agentes (historiales, snapshots, logs,
-/// cachés, worktrees, temporales). Solo existe si la ruta existe.
-/// La papelera del Finder lo hace recuperable; además solo se activa
-/// con todos los agentes parados.
+/// Nivel de seguridad: decide si entra en "Limpiar todo" y qué
+/// confirmación pide al usuario.
+enum JunkLevel: Int {
+    case safe = 0        // temporales y logs: papelera directa
+    case redownload = 1  // cachés: se vuelven a descargar
+    case destructive = 2 // datos reales: jamás en "Limpiar todo"
+}
+
+/// Basura de agentes y herramientas de desarrollo. Ampliación con los
+/// sitios reales encontrados en este Mac (temporales de OpenCode y
+/// Playwright, cachés de Puppeteer/Serena/Codegraph, worktrees…).
+/// Reglas: solo rutas dentro de $HOME, $TMPDIR o /tmp (canonizadas,
+/// sin ".."), y solo se activa con todos los agentes parados.
 final class JunkStore: ObservableObject {
     @Published var rows: [JunkRow] = []
     @Published var scanning = false
     @Published var lastCleaned = ""
 
+    typealias TargetRow = (label: String, paths: [String], level: JunkLevel, kind: JunkRow.Kind)
+
     /// Destinos conocidos por familia (se filtran los inexistentes).
-    static func targets() -> [(agent: String, rows: [(label: String, paths: [String])])] {
+    static func targets() -> [(agent: String, rows: [TargetRow])] {
         let h = FileManager.default.homeDirectoryForCurrentUser.path
-        let tmp = NSTemporaryDirectory()
+        let tmp = NSTemporaryDirectory() // /private/var/folders/…/T/
         return [
             (agent: "OpenCode", rows: [
-                ("sesiones", ["\(h)/.local/share/opencode/opencode.db", "\(h)/.local/share/opencode/opencode.db-wal", "\(h)/.local/share/opencode/opencode.db-shm"]),
-                ("snapshots", ["\(h)/.local/share/opencode/snapshot"]),
-                ("worktrees", ["\(h)/.local/share/opencode/worktree"]),
-                ("logs", ["\(h)/.local/share/opencode/log"]),
-                ("shell", ["\(h)/.local/share/opencode/shell", "\(h)/.local/share/opencode/tool-output"]),
-                ("temporales", ["\(tmp)/opencode-pty-501"]),
+                (tr("mac.dbLabel"),
+                 ["\(h)/.local/share/opencode/opencode.db",
+                  "\(h)/.local/share/opencode/opencode.db-wal",
+                  "\(h)/.local/share/opencode/opencode.db-shm"],
+                 .destructive, .vacuum),
+                ("snapshots", ["\(h)/.local/share/opencode/snapshot"], .safe, .trash),
+                ("logs", ["\(h)/.local/share/opencode/log"], .safe, .trash),
+                ("shell", ["\(h)/.local/share/opencode/shell",
+                           "\(h)/.local/share/opencode/tool-output"], .safe, .trash),
+                ("cachés", ["\(h)/.cache/opencode"], .safe, .trash),
+                ("temporales", ["\(tmp)/opencode-pty-501",
+                                "\(tmp)/opencode/backend-dev.log",
+                                "\(tmp)/opencode/bigint",
+                                "\(tmp)/opencode/dzprobe",
+                                "\(tmp)/opencode/norm2",
+                                "\(tmp)/opencode/tutorials-backup",
+                                "\(tmp)/opencode/partimos-pw-venv"], .safe, .trash),
+            ]),
+            (agent: "Opencode Desktop", rows: [
+                ("cli", ["\(h)/Library/Application Support/ai.opencode.desktop/cli"], .redownload, .trash),
+                ("caché", ["\(h)/Library/Application Support/ai.opencode.desktop/Cache"], .safe, .trash),
             ]),
             (agent: "Codex", rows: [
-                ("logs", ["\(h)/.codex/logs_2.sqlite", "\(h)/.codex/logs_2.sqlite-shm", "\(h)/.codex/logs_2.sqlite-wal"]),
-                ("cola", ["\(h)/.codex/queue_1.sqlite", "\(h)/.codex/queue_1.sqlite-shm", "\(h)/.codex/queue_1.sqlite-wal"]),
-                ("historial", ["\(h)/.codex/sessions", "\(h)/.codex/history.jsonl"]),
+                ("logs", ["\(h)/.codex/logs_2.sqlite", "\(h)/.codex/logs_2.sqlite-shm", "\(h)/.codex/logs_2.sqlite-wal"], .safe, .trash),
+                ("cola", ["\(h)/.codex/queue_1.sqlite", "\(h)/.codex/queue_1.sqlite-shm", "\(h)/.codex/queue_1.sqlite-wal"], .safe, .trash),
+                ("historial", ["\(h)/.codex/sessions", "\(h)/.codex/history.jsonl"], .safe, .trash),
+                ("runtimes", ["\(h)/.cache/codex-runtimes"], .redownload, .trash),
             ]),
             (agent: "Claude", rows: [
-                ("sesiones", ["\(h)/.claude/sessions", "\(h)/.claude/session-env"]),
-                ("backups", ["\(h)/.claude/backups", "\(h)/.claude/ide"]),
-                ("historial", ["\(h)/.claude/projects", "\(h)/.claude/shell-snapshots", "\(h)/.claude/todos"]),
+                ("sesiones", ["\(h)/.claude/sessions", "\(h)/.claude/session-env"], .safe, .trash),
+                ("backups", ["\(h)/.claude/backups", "\(h)/.claude/ide"], .safe, .trash),
+                ("historial", ["\(h)/.claude/projects", "\(h)/.claude/shell-snapshots", "\(h)/.claude/todos"], .safe, .trash),
+                ("cachés", ["\(h)/Library/Application Support/Claude/Cache",
+                            "\(h)/Library/Application Support/Claude/Code Cache",
+                            "\(h)/Library/Application Support/Claude/GPUCache",
+                            "\(h)/Library/Application Support/Claude/DawnWebGPUCache",
+                            "\(h)/Library/Application Support/Claude/DawnGraphiteCache"], .safe, .trash),
             ]),
             (agent: "Cursor", rows: [
-                ("cachés", ["\(h)/Library/Application Support/Cursor/Cache", "\(h)/Library/Application Support/Cursor/logs", "\(h)/Library/Application Support/Cursor/Crashpad"]),
-                ("workspaces", ["\(h)/Library/Application Support/Cursor/User/workspaceStorage"]),
+                ("cachés", ["\(h)/Library/Application Support/Cursor/Cache",
+                            "\(h)/Library/Application Support/Cursor/logs",
+                            "\(h)/Library/Application Support/Cursor/Crashpad"], .safe, .trash),
+                ("workspaces", ["\(h)/Library/Application Support/Cursor/User/workspaceStorage"], .safe, .trash),
             ]),
             (agent: "VS Code", rows: [
-                ("cachés", ["\(h)/Library/Application Support/Code/Cache", "\(h)/Library/Application Support/Code/CachedData", "\(h)/Library/Application Support/Code/GPUCache", "\(h)/Library/Application Support/Code/logs", "\(h)/Library/Application Support/Code/Crashpad"]),
-                ("workspaces", ["\(h)/Library/Application Support/Code/User/workspaceStorage"]),
-            ]),
-            (agent: "Gemini", rows: [
-                ("temporales", ["\(h)/.gemini/tmp", "\(h)/.gemini/cache"]),
-                ("logs", ["\(h)/.gemini/logs", "\(h)/.gemini/history"]),
-            ]),
-            (agent: "OpenCode", rows: [
-                ("cachés", ["\(h)/.cache/opencode"]),
-            ]),
-            (agent: "Antigravity", rows: [
-                ("cachés", ["\(h)/.antigravity/cache", "\(h)/.antigravity/logs", "\(h)/.antigravity/tmp"]),
-            ]),
-            (agent: "Cline", rows: [
-                ("chats", ["\(h)/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev"]),
+                ("cachés", ["\(h)/Library/Application Support/Code/Cache",
+                            "\(h)/Library/Application Support/Code/CachedData",
+                            "\(h)/Library/Application Support/Code/GPUCache",
+                            "\(h)/Library/Application Support/Code/logs",
+                            "\(h)/Library/Application Support/Code/Crashpad"], .safe, .trash),
+                ("workspaces", ["\(h)/Library/Application Support/Code/User/workspaceStorage"], .safe, .trash),
+                ("cpptools", ["\(h)/Library/Caches/vscode-cpptools"], .redownload, .trash),
             ]),
             (agent: "Copilot", rows: [
-                ("cachés", ["\(h)/Library/Application Support/Copilot", "\(h)/Library/Application Support/Code/User/globalStorage/github.copilot-chat"]),
+                ("chats", ["\(h)/Library/Application Support/Copilot",
+                           "\(h)/Library/Application Support/Code/User/globalStorage/github.copilot-chat"], .safe, .trash),
             ]),
-            (agent: "Kilo", rows: [
-                ("cachés", ["\(h)/.kilo/cache", "\(h)/.kilo/logs"]),
+            (agent: "Antigravity", rows: [
+                ("cachés", ["\(h)/.antigravity/cache", "\(h)/.antigravity/logs", "\(h)/.antigravity/tmp"], .safe, .trash),
             ]),
-            (agent: "Crush", rows: [
-                ("logs", ["\(h)/.crush/logs", "\(h)/.crush/cache"]),
+            (agent: "Gemini", rows: [
+                ("temporales", ["\(h)/.gemini/tmp", "\(h)/.gemini/cache"], .safe, .trash),
+                ("logs", ["\(h)/.gemini/logs", "\(h)/.gemini/history"], .safe, .trash),
             ]),
-            (agent: "Qwen", rows: [
-                ("cachés", ["\(h)/.qwen/cache", "\(h)/.qwen/logs"]),
+            (agent: "Cline", rows: [
+                ("chats", ["\(h)/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev"], .safe, .trash),
             ]),
-            (agent: "Pi", rows: [
-                ("cachés", ["\(h)/.pi/cache", "\(h)/.pi/logs"]),
+            (agent: "Kilo", rows: [("cachés", ["\(h)/.kilo/cache", "\(h)/.kilo/logs"], .safe, .trash)]),
+            (agent: "Crush", rows: [("logs", ["\(h)/.crush/logs", "\(h)/.crush/cache"], .safe, .trash)]),
+            (agent: "Qwen", rows: [("cachés", ["\(h)/.qwen/cache", "\(h)/.qwen/logs"], .safe, .trash)]),
+            (agent: "Pi", rows: [("cachés", ["\(h)/.pi/cache", "\(h)/.pi/logs"], .safe, .trash)]),
+            (agent: "Hermes", rows: [("cachés", ["\(h)/.hermes/cache", "\(h)/.hermes/logs"], .safe, .trash)]),
+            (agent: "Kimi", rows: [("cachés", ["\(h)/.kimi/cache", "\(h)/.kimi/logs"], .safe, .trash)]),
+            (agent: "Grok", rows: [("cachés", ["\(h)/.grok/cache", "\(h)/.grok/logs"], .safe, .trash)]),
+            (agent: "Droid", rows: [("cachés", ["\(h)/.droid/cache", "\(h)/.droid/logs", "\(h)/.factory/tool-logs"], .safe, .trash)]),
+            (agent: "Serena", rows: [
+                ("logs", ["\(h)/.serena/logs"], .safe, .trash),
+                ("language servers", ["\(h)/.serena/language_servers/static"], .redownload, .trash),
             ]),
-            (agent: "Hermes", rows: [
-                ("cachés", ["\(h)/.hermes/cache", "\(h)/.hermes/logs"]),
+            (agent: "Codegraph", rows: [
+                ("binario", ["\(h)/.codegraph/versions"], .redownload, .trash),
             ]),
-            (agent: "Kimi", rows: [
-                ("cachés", ["\(h)/.kimi/cache", "\(h)/.kimi/logs"]),
+            (agent: "Playwright", rows: [
+                ("artifacts", ["\(tmp)/playwright-artifacts-*"], .safe, .trash),
+                ("navegadores", ["\(h)/Library/Caches/ms-playwright"], .redownload, .trash),
+                ("mcp", ["\(h)/Library/Caches/ms-playwright-mcp"], .redownload, .trash),
             ]),
-            (agent: "Grok", rows: [
-                ("cachés", ["\(h)/.grok/cache", "\(h)/.grok/logs"]),
+            (agent: "Puppeteer", rows: [
+                ("chrome", ["\(h)/.cache/puppeteer/chrome",
+                            "\(h)/.cache/puppeteer/chrome-headless-shell"], .redownload, .trash),
             ]),
-            (agent: "Droid", rows: [
-                ("cachés", ["\(h)/.droid/cache", "\(h)/.droid/logs", "\(h)/.factory/tool-logs"]),
+            (agent: "Metro", rows: [
+                ("caché", ["\(tmp)/metro-cache"], .safe, .trash),
+                ("logs", ["/tmp/metro-*.log"], .safe, .trash),
+            ]),
+            (agent: "Node", rows: [
+                ("temporales", ["\(tmp)/node-compile-cache", "\(tmp)/jest_dx",
+                                "\(tmp)/tsx-501", "\(tmp)/scoped_dir*"], .safe, .trash),
+                ("gyp", ["\(h)/Library/Caches/node-gyp", "\(h)/Library/Caches/typescript",
+                         "\(h)/Library/Caches/next-swc", "\(h)/Library/Caches/bun"], .redownload, .trash),
+                ("uv", ["\(h)/.cache/uv"], .redownload, .trash),
+            ]),
+            (agent: "Cachés", rows: [
+                ("paquetes", ["\(h)/Library/Caches/pnpm", "\(h)/Library/Caches/CocoaPods",
+                              "\(h)/Library/Caches/electron"], .redownload, .trash),
+                ("ollama", ["\(h)/Library/Caches/ollama"], .redownload, .trash),
+                ("homebrew", ["\(h)/Library/Caches/Homebrew"], .redownload, .trash),
+                ("actualizadores", ["\(h)/Library/Caches/com.microsoft.VSCode.ShipIt",
+                                    "\(h)/Library/Caches/@opencode-aidesktop-updater"], .redownload, .trash),
+            ]),
+            (agent: "Tmp", rows: [
+                ("logs", ["/tmp/porfolio-backend.log", "/tmp/spa.log", "/tmp/serve.log"], .safe, .trash),
+                ("datos", ["/tmp/pre_*.sql", "/tmp/b.js", "/tmp/bundle.js", "/tmp/*.yaml"], .safe, .trash),
+                ("vídeo", ["/tmp/bubble.mp4", "/tmp/bubble.mp4.sb-*"], .destructive, .huge),
             ]),
         ]
     }
 
-    private var lastScan = Date.distantPast
+    /// Expande globs y filtra rutas seguras (ver `JunkPaths` en
+    /// NotchCore: zonas permitidas = $HOME, $TMPDIR y /tmp).
+    static func safeExpand(_ raw: String) -> [String] {
+        JunkPaths.expand(raw)
+    }
+
+    /// Worktrees de OpenCode (contienen `.git`): dos filas por cada uno —
+    /// regenerables (node_modules/dist/build/png sueltos) y el completo.
+    static func worktreeRows() -> [JunkRow] {
+        let fm = FileManager.default
+        let h = fm.homeDirectoryForCurrentUser.path
+        let root = "\(h)/.local/share/opencode/worktree"
+        guard let en = fm.enumerator(atPath: root) else { return [] }
+        var roots: [String] = []
+        for case let rel as String in en {
+            let parts = rel.split(separator: "/")
+            guard parts.count <= 5, parts.last == ".git" else { continue }
+            var dir = String(rel)
+            dir.removeLast(4) // quita ".git" (fichero en worktrees)
+            let full = (root as NSString).appendingPathComponent(dir)
+            if !roots.contains(full) { roots.append(full) }
+        }
+        var out: [JunkRow] = []
+        for w in roots {
+            let name = (w as NSString).lastPathComponent
+            var regen = ["node_modules", "dist", "build"]
+                .map { (w as NSString).appendingPathComponent($0) }
+                .filter { fm.fileExists(atPath: $0) }
+            if let kids = try? fm.contentsOfDirectory(atPath: w) {
+                regen += kids.filter { $0.lowercased().hasSuffix(".png") }
+                    .map { (w as NSString).appendingPathComponent($0) }
+            }
+            if !regen.isEmpty {
+                let kb = duKB(regen)
+                if kb > 0 {
+                    out.append(JunkRow(id: w + "#regen", agent: "OpenCode",
+                                       label: "\(tr("mac.wtRegen")) · \(name)",
+                                       paths: regen, bytes: kb * 1024,
+                                       level: .redownload, kind: .trash))
+                }
+            }
+            let kbAll = duKB([w])
+            if kbAll > 0 {
+                out.append(JunkRow(id: w, agent: "OpenCode",
+                                   label: "\(tr("mac.wtCode")) · \(name)",
+                                   paths: [w], bytes: kbAll * 1024,
+                                   level: .destructive, kind: .worktree))
+            }
+        }
+        return out
+    }
 
     /// Mide con `du` en background (rápido, sin permisos). Con TTL:
     /// entrar en la pestaña Mac no relanza `du` cada vez.
@@ -1036,14 +1160,18 @@ final class JunkStore: ObservableObject {
             let fm = FileManager.default
             for fam in Self.targets() {
                 for r in fam.rows {
-                    let live = r.paths.filter { fm.fileExists(atPath: $0) }
+                    let live = r.paths.flatMap { Self.safeExpand($0) }
+                        .filter { fm.fileExists(atPath: $0) }
                     guard !live.isEmpty else { continue }
                     let kb = Self.duKB(live)
                     guard kb > 0 else { continue }
-                    out.append(JunkRow(id: "\(fam.agent)/\(r.label)", agent: fam.agent,
-                                       label: r.label, paths: live, bytes: kb * 1024))
+                    out.append(JunkRow(id: "\(fam.agent)/\(r.label)",
+                                       agent: fam.agent, label: r.label,
+                                       paths: live, bytes: kb * 1024,
+                                       level: r.level, kind: r.kind))
                 }
             }
+            out += Self.worktreeRows()
             out.sort { $0.bytes > $1.bytes }
             DispatchQueue.main.async {
                 self.rows = out
@@ -1051,6 +1179,8 @@ final class JunkStore: ObservableObject {
             }
         }
     }
+
+    private var lastScan = Date.distantPast
 
     static func duKB(_ paths: [String]) -> Int64 {
         let p = Process()
@@ -1087,16 +1217,85 @@ final class JunkStore: ObservableObject {
         scan(force: true)
     }
 
-    func trashAll() {
-        let all = rows.flatMap(\.paths)
+    /// Compacta la base SQLite con VACUUM: reduce el tamaño SIN perder
+    /// sesiones (el WAL se integra).
+    func vacuum(_ row: JunkRow) {
+        guard let db = row.paths.first else { return }
+        let before = row.bytes
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+            p.arguments = [db, "VACUUM;"]
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            var ran = false
+            if (try? p.run()) != nil { ran = true; p.waitUntilExit() }
+            let ok = ran && p.terminationStatus == 0
+            let after = Self.duKB([db]) * 1024
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.lastCleaned = ok
+                    ? "✓ \(row.agent)/\(row.label) \(Self.formatBytes(before)) → \(Self.formatBytes(after))"
+                    : "✗ \(row.agent)/\(row.label)"
+                self.scan(force: true)
+            }
+        }
+    }
+
+    /// Borra DEFINITIVAMENTE (sin papelera): para ficheros enormes.
+    func deleteForever(_ row: JunkRow) {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            var failed = 0
+            for path in row.paths {
+                do { try FileManager.default.removeItem(atPath: path) } catch { failed += 1 }
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.lastCleaned = failed == 0
+                    ? "✓ \(row.agent)/\(row.label)"
+                    : tr("mac.trashFails", failed)
+                self.scan(force: true)
+            }
+        }
+    }
+
+    /// ¿El worktree tiene cambios sin commitear? Si falla el comando
+    /// (sin git…), se bloquea por seguridad.
+    static func worktreeIsDirty(_ path: String) -> Bool {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        p.arguments = ["-C", path, "status", "--porcelain"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return true }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else { return true }
+        return !data.isEmpty
+    }
+
+    /// "Limpiar todo": solo papelera y no-destructivos (nunca la base
+    /// de datos ni el código de un worktree).
+    var cleanableRows: [JunkRow] {
+        rows.filter { $0.kind == .trash && $0.level != .destructive }
+    }
+
+    var cleanableBytes: Int64 { cleanableRows.reduce(0) { $0 + $1.bytes } }
+
+    var cleanableHasRedownload: Bool { cleanableRows.contains { $0.level == .redownload } }
+
+    var allBytes: Int64 { rows.reduce(0) { $0 + $1.bytes } }
+
+    func cleanAll() {
+        let all = cleanableRows.flatMap(\.paths)
+        guard !all.isEmpty else { return }
         let r = Self.trash(paths: all)
         lastCleaned = r.failed == 0
-            ? "\(Self.formatBytes(allBytes)) \(tr("mac.toTrash"))"
+            ? "\(Self.formatBytes(cleanableBytes)) \(tr("mac.toTrash"))"
             : tr("mac.trashFails", r.failed)
         scan(force: true)
     }
-
-    var allBytes: Int64 { rows.reduce(0) { $0 + $1.bytes } }
 
     static func formatBytes(_ b: Int64) -> String {
         if b >= 1_073_741_824 { return String(format: "%.1f GB", Double(b) / 1_073_741_824) }
@@ -1105,8 +1304,9 @@ final class JunkStore: ObservableObject {
     }
 }
 
-/// Sección LIMPIEZA: qué basura hay por agente y botón para llevarla a
-/// la papelera. Solo activo con todos los agentes parados. Plegable.
+/// Sección LIMPIEZA: qué basura hay, por nivel de riesgo, con acciones
+/// especiales (compactar, worktree con git, borrado definitivo).
+/// Solo activo con todos los agentes parados. Plegable.
 struct JunkSectionView: View {
     var store: SessionStore
     @ObservedObject var junk: JunkStore
@@ -1166,6 +1366,72 @@ struct JunkSectionView: View {
         .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
     }
 
+    /// Insignia de nivel: ✓ seguro · ↓ se re-descarga · ! destructivo.
+    private func levelBadge(_ level: JunkLevel) -> some View {
+        let icon: String
+        let color: Color
+        switch level {
+        case .safe: icon = "checkmark"; color = Color(hex: "2F9E6E")
+        case .redownload: icon = "arrow.down"; color = Color(hex: "4C8FD8")
+        case .destructive: icon = "exclamationmark"; color = Color(hex: "F2B33D")
+        }
+        return Image(systemName: icon)
+            .font(.system(size: 7, weight: .bold))
+            .foregroundStyle(color)
+            .frame(width: 16, height: 16)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(color.opacity(0.15))
+            )
+    }
+
+    @ViewBuilder
+    private func rowButtons(_ row: JunkRow) -> some View {
+        switch row.kind {
+        case .trash:
+            Button {
+                junk.trashRow(row)
+            } label: {
+                Image(systemName: "trash").font(.system(size: 10))
+            }
+            .buttonStyle(NotchGhostButton(size: .mini))
+            .disabled(!allIdle)
+            .help(allIdle ? tr("mac.toTrash") : tr("mac.waitAgents"))
+        case .vacuum:
+            HStack(spacing: 4) {
+                Button(tr("mac.vacuum")) { junk.vacuum(row) }
+                    .buttonStyle(NotchGhostButton(size: .mini, tint: Color(hex: "4C8FD8")))
+                    .disabled(!allIdle)
+                Button { confirmRow(row, forever: false) } label: {
+                    Image(systemName: "trash").font(.system(size: 10))
+                }
+                .buttonStyle(NotchGhostButton(size: .mini, tint: Color(hex: "F2B33D")))
+                .disabled(!allIdle)
+            }
+        case .worktree:
+            Button { worktreeAction(row) } label: {
+                Image(systemName: "trash").font(.system(size: 10))
+            }
+            .buttonStyle(NotchGhostButton(size: .mini, tint: Color(hex: "F2B33D")))
+            .disabled(!allIdle)
+            .help(allIdle ? tr("mac.toTrash") : tr("mac.waitAgents"))
+        case .huge:
+            HStack(spacing: 4) {
+                Button { confirmRow(row, forever: false) } label: {
+                    Image(systemName: "trash").font(.system(size: 10))
+                }
+                .buttonStyle(NotchGhostButton(size: .mini, tint: Color(hex: "F2B33D")))
+                .disabled(!allIdle)
+                Button { confirmRow(row, forever: true) } label: {
+                    Image(systemName: "xmark.bin.fill").font(.system(size: 10))
+                }
+                .buttonStyle(NotchGhostButton(size: .mini, tint: Color(hex: "E0574B")))
+                .disabled(!allIdle)
+                .help(tr("mac.deleteForever"))
+            }
+        }
+    }
+
     @ViewBuilder
     private var junkBody: some View {
         if junk.rows.isEmpty, !junk.scanning {
@@ -1173,6 +1439,7 @@ struct JunkSectionView: View {
         } else {
             ForEach(junk.rows) { row in
                 HStack(spacing: 6) {
+                    levelBadge(row.level)
                     Circle()
                         .fill(agentColor(for: row.agent, default: Color.gray))
                         .frame(width: 7, height: 7)
@@ -1181,35 +1448,80 @@ struct JunkSectionView: View {
                     Spacer()
                     Text(JunkStore.formatBytes(row.bytes))
                         .font(.notchMono(10)).foregroundStyle(.secondary).monospacedDigit()
-                    Button {
-                        junk.trashRow(row)
-                    } label: {
-                        Image(systemName: "trash").font(.system(size: 10))
-                    }
-                    .buttonStyle(NotchGhostButton(size: .mini))
-                    .disabled(!allIdle)
-                    .help(allIdle ? tr("mac.toTrash") : tr("mac.waitAgents"))
+                    rowButtons(row)
                 }
             }
+            // Limpiar todo: solo papelera + re-descargables (jamás
+            // datos destructivos: base de datos ni código).
             Button(allIdle ? tr("mac.cleanAll") : tr("mac.waitAgents")) {
                 confirmClean()
             }
             .buttonStyle(NotchPrimaryButton(size: .small, color: Color(hex: "E0574B")))
-            .disabled(!allIdle || junk.rows.isEmpty)
+            .disabled(!allIdle || junk.cleanableRows.isEmpty)
         }
         if !junk.lastCleaned.isEmpty {
             Text(junk.lastCleaned).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
         }
     }
 
-    private func confirmClean() {
+    /// Papelera con confirmación explícita (datos destructivos).
+    private func confirmRow(_ row: JunkRow, forever: Bool) {
         let a = NSAlert()
-        a.messageText = tr("mac.cleanTitle", JunkStore.formatBytes(junk.allBytes))
-        a.informativeText = tr("mac.cleanBody", Set(junk.rows.map(\.agent)).sorted().joined(separator: ", "))
+        a.messageText = tr("mac.dangerTitle")
+        a.informativeText = tr(forever ? "mac.deleteBody" : "mac.dangerBody",
+                               row.label, JunkStore.formatBytes(row.bytes))
+        a.addButton(withTitle: tr(forever ? "mac.deleteForever" : "mac.toTrash"))
+        a.addButton(withTitle: tr("mac.cancel"))
+        if a.runModal() == .alertFirstButtonReturn {
+            if forever {
+                // Doble confirmación para el borrado definitivo.
+                let b = NSAlert()
+                b.messageText = row.label
+                b.informativeText = tr("mac.deleteBody", row.label, JunkStore.formatBytes(row.bytes))
+                b.addButton(withTitle: tr("mac.deleteForever"))
+                b.addButton(withTitle: tr("mac.cancel"))
+                if b.runModal() == .alertFirstButtonReturn {
+                    junk.deleteForever(row)
+                }
+            } else {
+                junk.trashRow(row)
+            }
+        }
+    }
+
+    /// Worktree: bloqueado si hay cambios sin commitear.
+    private func worktreeAction(_ row: JunkRow) {
+        let path = row.paths.first ?? ""
+        DispatchQueue.global(qos: .userInitiated).async {
+            let dirty = JunkStore.worktreeIsDirty(path)
+            DispatchQueue.main.async {
+                if dirty {
+                    let a = NSAlert()
+                    a.messageText = tr("mac.wtDirty")
+                    a.informativeText = row.label
+                    a.addButton(withTitle: tr("mac.cancel"))
+                    a.runModal()
+                } else {
+                    self.confirmRow(row, forever: false)
+                }
+            }
+        }
+    }
+
+    private func confirmClean() {
+        let rows = junk.cleanableRows
+        guard !rows.isEmpty else { return }
+        let a = NSAlert()
+        a.messageText = tr("mac.cleanTitle", JunkStore.formatBytes(junk.cleanableBytes))
+        var body = tr("mac.cleanBody", Set(rows.map(\.agent)).sorted().joined(separator: ", "))
+        if junk.cleanableHasRedownload {
+            body += "\n\n" + tr("mac.cleanRedownload")
+        }
+        a.informativeText = body
         a.addButton(withTitle: tr("mac.cleanOk"))
         a.addButton(withTitle: tr("mac.cancel"))
         if a.runModal() == .alertFirstButtonReturn {
-            junk.trashAll()
+            junk.cleanAll()
         }
     }
 }

@@ -57,6 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var notchWidth: CGFloat?
     private var notchRect: CGRect?
     private var timer: Timer?
+    /// Marcas de agentes ya avisadas por la auditoría (dedupe).
+    private var unmappedLogged = Set<String>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -73,6 +75,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             HistoryStore.shared.record(fresh)
             self?.announceWaiting(fresh)
             self?.announceFinished(fresh)
+        }
+        // Auditoría: marcas de agentes que ningún detector reclama →
+        // stderr una vez cada una (para añadirlas a la tabla).
+        store.onSnapshot = { [weak self] snap in
+            guard let self else { return }
+            for line in ProcessMonitor.unmappedAgents(in: snap)
+            where self.unmappedLogged.insert(line).inserted {
+                fputs("NOTCH-UNMAPPED \(line)\n", stderr)
+            }
         }
         AppFonts.register()
         MiniTabs.register()
