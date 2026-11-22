@@ -98,18 +98,46 @@ struct ActivityView: View {
     @ObservedObject private var settings = NotchSettings.shared
     @State private var range = 1 // 0 día · 1 semana · 2 mes
 
+    /// Rango real: hoy, la semana natural (según locale) y el mes
+    /// natural — no una ventana rodante de7/30 días.
     private var since: Date {
         let cal = Calendar.current
         switch range {
-        case 0: return cal.startOfDay(for: Date())
-        case 2: return cal.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-        default: return cal.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        case 0:
+            return cal.startOfDay(for: Date())
+        case 1:
+            let comps = cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
+            return cal.date(from: comps) ?? cal.startOfDay(for: Date())
+        default:
+            let comps = cal.dateComponents([.year, .month], from: Date())
+            return cal.date(from: comps) ?? cal.startOfDay(for: Date())
+        }
+    }
+
+    /// Días transcurridos del periodo (para la media diaria).
+    private var daysInPeriod: Int {
+        let diff = Calendar.current.dateComponents([.day], from: since, to: Date()).day ?? 0
+        return max(1, diff + 1)
+    }
+
+    private var periodLabel: String {
+        switch range {
+        case 0: return tr("act.today")
+        case 1: return tr("act.thisWeek")
+        default: return tr("act.thisMonth")
         }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Selector de rango propio.
+            // Solo uso real: mínimo60 s en el periodo. Detecciones
+            // accidentales de segundos no aparecen (ni su tiempo en el
+            // total). Si no has usado nada, se muestra el vacío.
+            let rows = store.activeSecondsPerAgent(since: since).filter { $0.seconds >= 60 }
+            let total = rows.reduce(0.0) { $0 + $1.seconds }
+
+            // Primero la cabecera con la media; el selector, debajo.
+            heroCard(total: total)
             NotchSegments(
                 selection: $range,
                 options: [(0, tr("act.day")), (1, tr("act.week")), (2, tr("act.month"))],
@@ -117,13 +145,6 @@ struct ActivityView: View {
             )
             .frame(maxWidth: 260)
 
-            // Solo uso real: mínimo60 s en el periodo. Detecciones
-            // accidentales de segundos no aparecen (ni su tiempo en el
-            // total). Si no has usado nada, se muestra el vacío.
-            let rows = store.activeSecondsPerAgent(since: since).filter { $0.seconds >= 60 }
-            let total = rows.reduce(0.0) { $0 + $1.seconds }
-
-            heroCard(total: total)
             if rows.isEmpty {
                 emptyState
             } else {
@@ -149,9 +170,21 @@ struct ActivityView: View {
                         .font(.notchMono(34))
                         .foregroundStyle(.white)
                         .monospacedDigit()
-                    Text(range == 0 ? tr("act.today") : range == 1 ? tr("act.days7") : tr("act.days30"))
-                        .font(.notchMono(10))
-                        .foregroundStyle(Color.white.opacity(0.42))
+                    // Periodo + media diaria (arriba, como se pidió).
+                    HStack(spacing: 5) {
+                        Text(periodLabel)
+                            .font(.notchMono(10))
+                            .foregroundStyle(Color.white.opacity(0.42))
+                        if total > 0 && daysInPeriod > 1 {
+                            Text("·")
+                                .font(.notchMono(10))
+                                .foregroundStyle(Color.white.opacity(0.28))
+                            Text("\(tr("act.avg")) \(formatActive(total / Double(daysInPeriod)))")
+                                .font(.notchMono(10))
+                                .foregroundStyle(settings.accent.opacity(0.95))
+                                .monospacedDigit()
+                        }
+                    }
                 }
                 Spacer()
                 // Racha como ficha: llama + número + mejor.
@@ -267,81 +300,93 @@ struct ActivityView: View {
         return NotchCard {
             // Una sola vista (ver NotchCard): tag + rejilla juntos.
             VStack(alignment: .leading, spacing: 8) {
-                NotchTag(icon: "square.grid.3x3.fill", text: tr("act.heat"), color: settings.accent)
-                if hasData {
-                let peak = max(heat.flatMap { $0 }.map(\.seconds).max() ?? 1, 1)
-                // Filas domingo primero: Lun/Mié/Vie en 1/3/5.
-                let wd = Calendar.current.veryShortWeekdaySymbols
-                HStack(alignment: .top, spacing: 5) {
-                    // Etiquetas de día (L X V) a la izquierda.
-                    VStack(spacing: 3) {
-                        ForEach(0..<7, id: \.self) { r in
-                            Text(r == 1 || r == 3 || r == 5 ? String(wd[r].prefix(1)) : " ")
-                                .font(.notchMono(7))
-                                .foregroundStyle(Color.white.opacity(0.35))
-                                .frame(height: 17)
+                // Cabecera: rótulo a la izquierda, leyenda a la derecha.
+                HStack(spacing: 8) {
+                    NotchTag(icon: "square.grid.3x3.fill", text: tr("act.heat"), color: settings.accent)
+                    HStack(spacing: 3) {
+                        Text(tr("act.less"))
+                            .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
+                        ForEach(0..<5, id: \.self) { b in
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(b == 0 ? Color.white.opacity(0.08) : settings.accent.opacity([0.25, 0.45, 0.7, 1.0][b - 1]))
+                                .frame(width: 9, height: 9)
                         }
+                        Text(tr("act.more"))
+                            .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
                     }
-                    ForEach(heat.indices, id: \.self) { c in
+                }
+                if hasData {
+                    let peak = max(heat.flatMap { $0 }.map(\.seconds).max() ?? 1, 1)
+                    // Filas domingo primero: Lun/Mié/Vie en 1/3/5.
+                    let wd = Calendar.current.veryShortWeekdaySymbols
+                    HStack(alignment: .top, spacing: 4) {
+                        // Columna de días (L X V) alineada con las celdas.
                         VStack(spacing: 3) {
-                            Text(monthMark(heat, c))
-                                .font(.notchMono(7))
-                                .foregroundStyle(Color.white.opacity(0.4))
-                                .frame(height: 10)
+                            // Ancho fijo: un Color.clear flexible se comería el espacio.
+                            Color.clear.frame(width: 14, height: 12)
+                            ForEach(0..<7, id: \.self) { r in
+                                Text(r == 1 || r == 3 || r == 5 ? String(wd[r].prefix(1)) : " ")
+                                    .font(.notchMono(7))
+                                    .foregroundStyle(Color.white.opacity(0.35))
+                                    .frame(height: 18)
+                            }
+                        }
+                        ForEach(heat.indices, id: \.self) { c in
                             VStack(spacing: 3) {
-                                ForEach(heat[c].indices, id: \.self) { r in
-                                    let cell = heat[c][r]
-                                    if let d = cell.day {
-                                        let isToday = Calendar.current.isDateInToday(d)
-                                        RoundedRectangle(cornerRadius: 3)
-                                            .fill(heatColor(cell.seconds, peak: peak))
-                                            .frame(width: 17, height: 17)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 3)
-                                                    .stroke(isToday ? Color.white.opacity(0.7) : Color.white.opacity(0.05),
-                                                            lineWidth: isToday ? 1.2 : 1)
-                                            )
-                                            .help("\(dayLabel(d)): \(formatActive(cell.seconds))")
-                                    } else {
-                                        RoundedRectangle(cornerRadius: 3)
-                                            .fill(Color.clear)
-                                            .frame(width: 17, height: 17)
+                                Text(monthMark(heat, c))
+                                    .font(.notchMono(7))
+                                    .foregroundStyle(Color.white.opacity(0.4))
+                                    .frame(height: 12)
+                                VStack(spacing: 3) {
+                                    ForEach(heat[c].indices, id: \.self) { r in
+                                        let cell = heat[c][r]
+                                        if let d = cell.day {
+                                            let isToday = Calendar.current.isDateInToday(d)
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .fill(heatColor(cell.seconds, peak: peak))
+                                                .frame(width: 18, height: 18)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 4)
+                                                        .stroke(
+                                                            isToday ? Color.white.opacity(0.75)
+                                                                : Color.white.opacity(cell.seconds > 0 ? 0 : 0.05),
+                                                            lineWidth: isToday ? 1.4 : 1
+                                                        )
+                                                )
+                                                .help("\(dayLabel(d)): \(formatActive(cell.seconds))")
+                                        } else {
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .fill(Color.clear)
+                                                .frame(width: 18, height: 18)
+                                        }
                                     }
                                 }
                             }
                         }
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
-                }
-                HStack(spacing: 4) {
-                    Text(tr("act.less"))
-                        .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
-                    ForEach(0..<5, id: \.self) { b in
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(b == 0 ? Color.white.opacity(0.08) : settings.accent.opacity([0.25, 0.45, 0.7, 1.0][b - 1]))
-                            .frame(width: 10, height: 10)
-                    }
-                    Text(tr("act.more"))
-                        .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
-                    Spacer()
                     if let best = weekBest() {
-                        Text(tr("act.bestDay", dayLabel(best.day), formatActive(best.seconds)))
-                            .font(.notchMono(9))
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(settings.accent.opacity(0.9))
+                            Text(tr("act.bestDay", dayLabel(best.day), formatActive(best.seconds)))
+                                .font(.notchMono(9))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.top, 2)
                     }
+                } else {
+                    Text(tr("act.empty"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 8)
                 }
-                .padding(.top, 4)
-            } else {
-                Text(tr("act.empty"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 8)
-            }
             }
         }
     }
 
-    // MARK: - Heatmap (GitHub): 12 semanas × 7 días, domingo primero.
 
     private typealias HeatCell = (day: Date?, seconds: TimeInterval)
 
@@ -351,7 +396,8 @@ struct ActivityView: View {
         let cal = Calendar.current
         let lead = (cal.component(.weekday, from: first.day) - 1 + 7) % 7
         var cells: [HeatCell] = Array(repeating: (nil, 0), count: lead)
-        cells += ordered.map { ($0.day, $0.seconds) }
+        // Uso real: <60 s en el día = sin celda.
+        cells += ordered.map { ($0.day, $0.seconds >= 60 ? $0.seconds : 0) }
         while cells.count % 7 != 0 { cells.append((nil, 0)) }
         return stride(from: 0, to: cells.count, by: 7).map { Array(cells[$0..<min($0 + 7, cells.count)]) }
     }

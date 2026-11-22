@@ -123,7 +123,8 @@ final class NotchSettings: ObservableObject {
         clipAutoPaste = d.object(forKey: "notchClipAutoPaste") as? Bool ?? false
         remindersEnabled = d.object(forKey: "notchRemindersEnabled") as? Bool ?? true
         useSystemCalendar = d.object(forKey: "notchUseSystemCalendar") as? Bool ?? false
-        useLocation = d.object(forKey: "notchUseLocation") as? Bool ?? false
+        // Automático por defecto: la primera vez se pide consentimiento.
+        useLocation = d.object(forKey: "notchUseLocation") as? Bool ?? true
         clipMax = d.object(forKey: "notchClipMax") as? Double ?? 30
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)

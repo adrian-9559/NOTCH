@@ -368,7 +368,6 @@ struct StatsView: View {
             // Qué carga el Mac (plegable): tabla ordenable con buscador.
             foldCard(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total",
                      icon: "list.bullet.rectangle", folded: $foldLoads) {
-                loadBar
                 HStack(spacing: 6) {
                     NotchSegments(
                         selection: $sortByCpu,
@@ -385,10 +384,16 @@ struct StatsView: View {
                 if sortedProcs.isEmpty {
                     Text(tr("mac.noMatch")).font(.caption).foregroundStyle(.secondary)
                 } else {
-                    ForEach(sortedProcs, id: \.pid) { t in
+                    // Ranking compacto con barra proporcional detrás:
+                    // se entiende de un vistazo qué carga la máquina.
+                    let maxMem = max(1, sortedProcs.map(\.memMB).max() ?? 1)
+                    ForEach(sortedProcs.prefix(6), id: \.pid) { t in
                         ProcRow(
                             t: t, color: procColor(t),
                             value: sortByCpu ? "\(Int(t.pct.rounded()))%" : memMBString(t.memMB),
+                            fraction: CGFloat(min(1, sortByCpu
+                                ? t.pct / max(1, totalCpu)
+                                : t.memMB / maxMem)),
                             expanded: expandedPid == t.pid,
                             onToggle: { expandedPid = expandedPid == t.pid ? 0 : t.pid }
                         )
@@ -512,15 +517,15 @@ struct StatsView: View {
         }
     }
 
-    /// Tarjeta unificada de mediciones: CPU, memoria y batería en tres
-    /// carriles con divisores, cada uno con su anillo. El pico y la
-    /// presión viven en su carril.
+    /// Tarjeta de mediciones: tres mini-tarjetas (CPU, memoria y
+    /// batería) con fondo propio y SIN separadores detrás: cada dato
+    /// vive en su bloque, sin líneas de por medio.
     private var measurementsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             NotchTag(icon: "gauge.with.needle", text: tr("mac.measurements"),
                      color: Color(hex: "2F9E6E"), trailing: chip)
-            HStack(alignment: .center, spacing: 0) {
-                // Carril CPU.
+            HStack(alignment: .top, spacing: 8) {
+                // Carril CPU (bloque propio, sin divisor).
                 VStack(spacing: 6) {
                     LaneGauge(value: "\(Int((snap.cpuUser + snap.cpuSys).rounded()))%",
                               fraction: cpuFrac, color: severityColor(fraction: cpuFrac))
@@ -530,8 +535,9 @@ struct StatsView: View {
                         .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.45))
                 }
                 .frame(maxWidth: .infinity)
-                laneDivider
-                // Carril memoria.
+                .padding(10)
+                .background(laneBg)
+                // Carril memoria (bloque propio, sin divisor).
                 VStack(spacing: 6) {
                     LaneGauge(value: "\(Int((memFrac * 100).rounded()))%",
                               fraction: memFrac, color: severityColor(fraction: memFrac))
@@ -546,8 +552,9 @@ struct StatsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                laneDivider
-                // Carril batería.
+                .padding(10)
+                .background(laneBg)
+                // Carril batería (mismo material que los otros dos).
                 batteryCard.frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -572,8 +579,14 @@ struct StatsView: View {
         .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
     }
 
-    private var laneDivider: some View {
-        Rectangle().fill(Color.white.opacity(0.09)).frame(width: 1)
+    /// Fondo de carril: bloque propio (sin líneas separadoras).
+    private var laneBg: some View {
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .fill(Color.white.opacity(0.04))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            )
     }
 
     private var pressureColor: Color {
@@ -661,26 +674,8 @@ struct StatsView: View {
 
     private var totalCpu: Double { (snap.cpuUser + snap.cpuSys) }
 
-    private var loadBar: some View {
-        let top = snap.tops.prefix(3)
-        let sum = top.reduce(0) { $0 + $1.pct }
-        let rest = max(0, totalCpu - sum)
-        let all = sum + rest
-        return GeometryReader { geo in
-            HStack(spacing: 2) {
-                ForEach(Array(top.enumerated()), id: \.offset) { i, t in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill([Color(hex: "2F9E6E"), Color(hex: "2F9E6E").opacity(0.65), Color(hex: "2F9E6E").opacity(0.4)][i % 3])
-                        .frame(width: all > 0 ? max(3, geo.size.width * t.pct / all) : 0)
-                }
-                RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.18))
-            }
-        }
-        .frame(height: 8)
-    }
-
     private var loadRest: Double {
-        let sum = snap.tops.prefix(3).reduce(0) { $0 + $1.pct }
+        let sum = sortedProcs.prefix(6).reduce(0) { $0 + $1.pct }
         return max(0, totalCpu - sum)
     }
 
@@ -829,11 +824,13 @@ struct DayChart: View {
     }
 }
 
-/// Fila de proceso del hub: botón expansible con valor configurable.
+/// Fila de proceso: barra proporcional detrás (qué parte del total
+/// consume) + valor + expansión al detalle.
 struct ProcRow: View {
     var t: ProcTop
     var color: Color
     var value: String
+    var fraction: CGFloat = 0
     var expanded: Bool
     var onToggle: () -> Void
 
@@ -843,17 +840,25 @@ struct ProcRow: View {
                 RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 9, height: 9)
                 Text(t.name).font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
                 Spacer()
-                Text(verbatim: value).font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
+                Text(verbatim: value).font(.notchMono(11)).foregroundStyle(.white.opacity(0.7)).monospacedDigit()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(Color.white.opacity(0.3))
                     .rotationEffect(.degrees(expanded ? 90 : 0))
             }
-            .padding(.horizontal, 6).padding(.vertical, 3)
+            .padding(.horizontal, 8).padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(expanded ? Color.white.opacity(0.09) : Color.white.opacity(0.03))
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(expanded ? 0.07 : 0.03))
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(color.opacity(0.18))
+                            .frame(width: max(8, geo.size.width * fraction))
+                    }
+                }
             )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(tr("mac.detail", t.name))
@@ -962,10 +967,12 @@ final class JunkStore: ObservableObject {
             (agent: "Codex", rows: [
                 ("logs", ["\(h)/.codex/logs_2.sqlite", "\(h)/.codex/logs_2.sqlite-shm", "\(h)/.codex/logs_2.sqlite-wal"]),
                 ("cola", ["\(h)/.codex/queue_1.sqlite", "\(h)/.codex/queue_1.sqlite-shm", "\(h)/.codex/queue_1.sqlite-wal"]),
+                ("historial", ["\(h)/.codex/sessions", "\(h)/.codex/history.jsonl"]),
             ]),
             (agent: "Claude", rows: [
                 ("sesiones", ["\(h)/.claude/sessions", "\(h)/.claude/session-env"]),
                 ("backups", ["\(h)/.claude/backups", "\(h)/.claude/ide"]),
+                ("historial", ["\(h)/.claude/projects", "\(h)/.claude/shell-snapshots", "\(h)/.claude/todos"]),
             ]),
             (agent: "Cursor", rows: [
                 ("cachés", ["\(h)/Library/Application Support/Cursor/Cache", "\(h)/Library/Application Support/Cursor/logs", "\(h)/Library/Application Support/Cursor/Crashpad"]),
@@ -977,6 +984,43 @@ final class JunkStore: ObservableObject {
             ]),
             (agent: "Gemini", rows: [
                 ("temporales", ["\(h)/.gemini/tmp", "\(h)/.gemini/cache"]),
+                ("logs", ["\(h)/.gemini/logs", "\(h)/.gemini/history"]),
+            ]),
+            (agent: "OpenCode", rows: [
+                ("cachés", ["\(h)/.cache/opencode"]),
+            ]),
+            (agent: "Antigravity", rows: [
+                ("cachés", ["\(h)/.antigravity/cache", "\(h)/.antigravity/logs", "\(h)/.antigravity/tmp"]),
+            ]),
+            (agent: "Cline", rows: [
+                ("chats", ["\(h)/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev"]),
+            ]),
+            (agent: "Copilot", rows: [
+                ("cachés", ["\(h)/Library/Application Support/Copilot", "\(h)/Library/Application Support/Code/User/globalStorage/github.copilot-chat"]),
+            ]),
+            (agent: "Kilo", rows: [
+                ("cachés", ["\(h)/.kilo/cache", "\(h)/.kilo/logs"]),
+            ]),
+            (agent: "Crush", rows: [
+                ("logs", ["\(h)/.crush/logs", "\(h)/.crush/cache"]),
+            ]),
+            (agent: "Qwen", rows: [
+                ("cachés", ["\(h)/.qwen/cache", "\(h)/.qwen/logs"]),
+            ]),
+            (agent: "Pi", rows: [
+                ("cachés", ["\(h)/.pi/cache", "\(h)/.pi/logs"]),
+            ]),
+            (agent: "Hermes", rows: [
+                ("cachés", ["\(h)/.hermes/cache", "\(h)/.hermes/logs"]),
+            ]),
+            (agent: "Kimi", rows: [
+                ("cachés", ["\(h)/.kimi/cache", "\(h)/.kimi/logs"]),
+            ]),
+            (agent: "Grok", rows: [
+                ("cachés", ["\(h)/.grok/cache", "\(h)/.grok/logs"]),
+            ]),
+            (agent: "Droid", rows: [
+                ("cachés", ["\(h)/.droid/cache", "\(h)/.droid/logs", "\(h)/.factory/tool-logs"]),
             ]),
         ]
     }

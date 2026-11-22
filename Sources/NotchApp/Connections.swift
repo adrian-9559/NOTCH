@@ -155,6 +155,14 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
 struct HourPoint: Equatable { var date: Date; var temp: Double; var code: Int }
 struct DayPoint: Equatable { var date: Date; var tmax: Double; var tmin: Double; var code: Int }
 
+/// Lugar predeterminado guardado por el usuario (máx.5).
+struct WeatherPlace: Codable, Identifiable, Equatable {
+    var id: String { "\(n)|\(la)|\(lo)" }
+    var n: String
+    var la: Double
+    var lo: Double
+}
+
 final class WeatherStore: ObservableObject {
     @Published var place = ""
     @Published var temp: Double?
@@ -167,9 +175,12 @@ final class WeatherStore: ObservableObject {
     @Published var loading = false
     @Published var error = false
     @Published var nowTick = Date()
+    /// Lugares predeterminados del usuario (chips bajo el buscador).
+    @Published var places: [WeatherPlace] = []
 
     private let loc = LocationService()
     private var timer: Timer?
+    private static let placesKey = "notchWeatherPlaces"
 
     private var savedLat: Double? {
         UserDefaults.standard.object(forKey: "notchWeatherLat") as? Double
@@ -206,7 +217,43 @@ final class WeatherStore: ObservableObject {
             error = true
             return
         }
+        // Automático: la primera vez macOS pide el consentimiento de
+        // ubicación; si se deniega, queda el estado de búsqueda.
         useCurrentLocation()
+    }
+
+    // MARK: - Lugares predeterminados
+
+    func loadPlaces() {
+        guard let data = UserDefaults.standard.data(forKey: Self.placesKey),
+              let list = try? JSONDecoder().decode([WeatherPlace].self, from: data)
+        else { return }
+        places = list
+    }
+
+    private func savePlaces() {
+        if let data = try? JSONEncoder().encode(places) {
+            UserDefaults.standard.set(data, forKey: Self.placesKey)
+        }
+    }
+
+    /// Guarda un lugar al buscar ciudad (máx.5, sin duplicados).
+    func rememberPlace(name: String, lat: Double, lon: Double) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        places.removeAll { $0.n.caseInsensitiveCompare(clean) == .orderedSame }
+        places.insert(WeatherPlace(n: clean, la: lat, lo: lon), at: 0)
+        if places.count > 5 { places = Array(places.prefix(5)) }
+        savePlaces()
+    }
+
+    func removePlace(_ p: WeatherPlace) {
+        places.removeAll { $0.id == p.id }
+        savePlaces()
+    }
+
+    func usePlace(_ p: WeatherPlace) {
+        fetch(lat: p.la, lon: p.lo, place: p.n)
     }
 
     func useCurrentLocation() {
@@ -236,6 +283,9 @@ final class WeatherStore: ObservableObject {
                 return
             }
             let label = m.locality ?? m.name ?? q
+            DispatchQueue.main.async {
+                self.rememberPlace(name: label, lat: c.latitude, lon: c.longitude)
+            }
             self.fetch(lat: c.latitude, lon: c.longitude, place: label, save: true)
         }
     }
@@ -373,6 +423,14 @@ struct WeatherView: View {
                 .help(tr("wthr.useLoc"))
                 .disabled(!settings.useLocation)
             }
+            // Lugares predeterminados: toca para cambiar, ✕ para quitar.
+            if !store.places.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(store.places) { p in placeChip(p) }
+                    }
+                }
+            }
             if store.loading && store.temp == nil {
                 VStack(spacing: 8) {
                     ProgressView().progressViewStyle(.circular).scaleEffect(0.7)
@@ -405,6 +463,7 @@ struct WeatherView: View {
         }
         .padding(8)
         .onAppear {
+            store.loadPlaces()
             store.startClock()
             store.loadDefault()
         }
@@ -617,6 +676,40 @@ struct WeatherView: View {
                                              startPoint: .top, endPoint: .bottom), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
+    }
+
+    /// Chip de lugar predeterminado: navega (izq) y quita (der).
+    private func placeChip(_ p: WeatherPlace) -> some View {
+        let current = store.place == p.n
+        return HStack(spacing: 0) {
+            Button { store.usePlace(p) } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(current ? settings.accent : Color.white.opacity(0.5))
+                    Text(p.n)
+                        .font(.notchMono(10))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(1)
+                }
+                .padding(.leading, 9).padding(.trailing, 3).padding(.vertical, 5)
+            }
+            .buttonStyle(.plain)
+            Button { store.removePlace(p) } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.35))
+                    .padding(.horizontal, 6).padding(.vertical, 5)
+            }
+            .buttonStyle(.plain)
+            .help(tr("wthr.removePlace"))
+        }
+        .background(
+            Capsule().fill(current ? settings.accent.opacity(0.16) : Color.white.opacity(0.05))
+        )
+        .overlay(
+            Capsule().stroke(current ? settings.accent.opacity(0.45) : Color.white.opacity(0.1), lineWidth: 1)
+        )
     }
 
     private func timeString(_ d: Date) -> String {

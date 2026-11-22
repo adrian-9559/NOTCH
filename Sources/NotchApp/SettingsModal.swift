@@ -43,11 +43,14 @@ final class SettingsWindowController: NSObject {
 
 /// Páginas del sidebar.
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case appearance, tabs, behavior, music, clipboard, connections, data, language, about
+    case home, news, appearance, tabs, behavior, music, clipboard, connections, data, language, about, terms
     var id: String { rawValue }
 
     var icon: String {
         switch self {
+        case .home: return "house.fill"
+        case .news: return "newspaper.fill"
+        case .terms: return "doc.text.fill"
         case .appearance: return "paintpalette.fill"
         case .tabs: return "menubar.rectangle"
         case .behavior: return "cursorarrow.click.2"
@@ -62,6 +65,9 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
 
     var titleKey: String {
         switch self {
+        case .home: return "set.home"
+        case .news: return "set.news"
+        case .terms: return "set.terms"
         case .appearance: return "set.color"
         case .tabs: return "set.navbar"
         case .behavior: return "set.behavior"
@@ -206,7 +212,7 @@ struct SettingsModalView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 7) {
-                        Text(tr(page.titleKey))
+                        Text(tr(page.titleKey).capitalized)
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(.white)
                         RoundedRectangle(cornerRadius: 1.5)
@@ -236,8 +242,11 @@ struct SettingsModalView: View {
             .padding(.top, 18)
             .padding(.bottom, 12)
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 16) {
                     switch page {
+                    case .home: homePage
+                    case .news: newsPage
+                    case .terms: termsPage
                     case .appearance: appearancePage
                     case .tabs: tabsPage
                     case .behavior: behaviorPage
@@ -250,7 +259,8 @@ struct SettingsModalView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                .padding(.top, 2)
+                .padding(.bottom, 28)
             }
         }
     }
@@ -442,7 +452,8 @@ struct SettingsModalView: View {
                     }
                 }
             }
-            SettingsCard(label: tr("set.songToast"), icon: "bell.fill", accent: settings.accent) {
+            // Apartado: qué avisos (sin duraciones mezcladas).
+            SettingsCard(label: tr("set.alerts"), icon: "bell.fill", accent: settings.accent) {
                 VStack(spacing: 2) {
                     IconToggleRow(icon: "music.note", label: tr("set.songToast"), subtitle: tr("set.songToastSub"), isOn: $settings.songToastEnabled, accent: settings.accent) {}
                     Divider().background(Color.white.opacity(0.07))
@@ -451,9 +462,15 @@ struct SettingsModalView: View {
                     IconToggleRow(icon: "hand.raised.fill", label: tr("set.waitToast"), subtitle: tr("set.waitToastSub"), isOn: $settings.waitToastEnabled, accent: settings.accent) {}
                     Divider().background(Color.white.opacity(0.07))
                     IconToggleRow(icon: "bell.badge.fill", label: tr("set.reminders"), subtitle: tr("set.remindersSub"), isOn: $settings.remindersEnabled, accent: settings.accent) {}
-                    Divider().background(Color.white.opacity(0.07))
+                }
+            }
+            // Apartado: cuánto dura cada aviso.
+            SettingsCard(label: tr("set.durations"), icon: "stopwatch.fill", accent: settings.accent) {
+                VStack(spacing: 2) {
                     DurationRow(label: tr("set.durSong"), value: $settings.songToastSeconds, accent: settings.accent)
+                    Divider().background(Color.white.opacity(0.07))
                     DurationRow(label: tr("set.durAgent"), value: $settings.agentToastSeconds, accent: settings.accent)
+                    Divider().background(Color.white.opacity(0.07))
                     DurationRow(label: tr("set.durWait"), value: $settings.waitToastSeconds, range: 3...15, accent: settings.accent)
                 }
             }
@@ -509,16 +526,18 @@ struct SettingsModalView: View {
                     }
                     Divider().background(Color.white.opacity(0.07))
                     DurationRow(label: tr("set.clipMax"), value: $settings.clipMax, range: 10...100, step: 5, accent: settings.accent, suffix: "")
-                    Divider().background(Color.white.opacity(0.07))
-                    HStack {
-                        Text(tr("set.inputMon"))
-                            .font(.caption2)
-                            .foregroundStyle(Color.white.opacity(0.5))
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer()
-                        Button(tr("set.openSettings")) { openPrivacySettings() }
-                            .controlSize(.small).buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
-                    }
+                }
+            }
+            // Apartado: permiso de entrada (atajo global).
+            SettingsCard(label: tr("set.inputPerm"), icon: "keyboard.fill", accent: settings.accent) {
+                HStack {
+                    Text(tr("set.inputMon"))
+                        .font(.caption2)
+                        .foregroundStyle(Color.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button(tr("set.openSettings")) { openPrivacySettings() }
+                        .controlSize(.small).buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
                 }
             }
         }
@@ -660,7 +679,7 @@ struct SettingsModalView: View {
 
     private var aboutPage: some View {
         SettingsCard(label: tr("set.privacy"), icon: "lock.fill", accent: settings.accent) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -674,9 +693,159 @@ struct SettingsModalView: View {
                             .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
                     }
                 }
-                Text(tr("set.privacyBody"))
-                    .font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.6))
-                    .fixedSize(horizontal: false, vertical: true)
+                privSection("priv.data", "priv.dataBody")
+                privDivider
+                privSection("priv.permissions", "priv.permissionsBody")
+                privDivider
+                privSection("priv.network", "priv.networkBody")
+                privDivider
+                privSection("priv.storage", "priv.storageBody")
+            }
+        }
+    }
+
+    private var privDivider: some View {
+        Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
+    }
+
+    /// Apartado de texto: rótulo mono + párrafo.
+    private func privSection(_ title: String, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(tr(title).capitalized)
+                .font(.notchMono(10))
+                .foregroundStyle(settings.accent.opacity(0.9))
+                .kerning(1)
+            Text(tr(body))
+                .font(.system(size: 11))
+                .foregroundStyle(Color.white.opacity(0.65))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Inicio
+
+    static let featureIcons = ["sparkles", "music.note", "chart.bar", "checklist",
+                               "note.text", "cloud.sun", "timer", "lock.shield"]
+
+    private var homePage: some View {
+        VStack(spacing: 16) {
+            SettingsCard(label: tr("set.home"), icon: "house.fill", accent: settings.accent) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(LinearGradient(colors: [settings.accent, settings.accent.opacity(0.6)],
+                                                     startPoint: .top, endPoint: .bottom))
+                                .frame(width: 40, height: 40)
+                                .shadow(color: settings.accent.opacity(0.4), radius: 10, y: 3)
+                            Image(systemName: "rectangle.topthird.inset.filled")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text("NOTCH")
+                                    .font(.notchMono(15)).foregroundStyle(.white).kerning(2)
+                                Text(NotchNews.version)
+                                    .font(.notchMono(9)).foregroundStyle(settings.accent)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Capsule().fill(settings.accent.opacity(0.15)))
+                            }
+                            Text(tr("home.tagline"))
+                                .font(.caption2).foregroundStyle(Color.white.opacity(0.5))
+                        }
+                    }
+                    Text(tr("home.body"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.65))
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            SettingsCard(label: tr("home.features"), icon: "square.grid.2x2.fill", accent: settings.accent) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                    ForEach(Array(Self.featureIcons.enumerated()), id: \.offset) { i, icon in
+                        HStack(alignment: .top, spacing: 7) {
+                            Image(systemName: icon)
+                                .font(.system(size: 11))
+                                .foregroundStyle(settings.accent)
+                                .frame(width: 24, height: 24)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(settings.accent.opacity(0.14)))
+                            Text(tr("home.f\(i + 1)"))
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.white.opacity(0.8))
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+            SettingsCard(label: tr("home.links"), icon: "link", accent: settings.accent) {
+                HStack(spacing: 8) {
+                    Button { openURL("https://github.com/adrian-9559/NOTCH") } label: {
+                        Label("GitHub", systemImage: "link")
+                    }
+                    .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
+                    Button { openURL("https://github.com/adrian-9559/NOTCH/issues") } label: {
+                        Label(tr("home.issues"), systemImage: "exclamationmark.bubble")
+                    }
+                    .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func openURL(_ s: String) {
+        if let u = URL(string: s) { NSWorkspace.shared.open(u) }
+    }
+
+    // MARK: - Novedades
+
+    private var newsPage: some View {
+        VStack(spacing: 16) {
+            ForEach(NotchNews.releases) { r in
+                SettingsCard(label: r.version, icon: "newspaper.fill", accent: settings.accent) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(r.date)
+                            .font(.notchMono(9))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                        ForEach(r.bullets, id: \.self) { key in
+                            HStack(alignment: .top, spacing: 7) {
+                                Circle().fill(settings.accent).frame(width: 4, height: 4).padding(.top, 5)
+                                Text(tr(key))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color.white.opacity(0.75))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Condiciones de uso
+
+    private var termsPage: some View {
+        SettingsCard(label: tr("set.terms"), icon: "doc.text.fill", accent: settings.accent) {
+            VStack(alignment: .leading, spacing: 10) {
+                let clauses = ["terms.t1", "terms.t2", "terms.t3", "terms.t4", "terms.t5", "terms.t6"]
+                ForEach(Array(clauses.enumerated()), id: \.offset) { i, key in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(i + 1).")
+                            .font(.notchMono(10))
+                            .foregroundStyle(settings.accent)
+                            .frame(width: 16, alignment: .trailing)
+                        Text(tr(key))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.white.opacity(0.7))
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         }
     }
@@ -973,6 +1142,33 @@ private struct SettingsCardBackground: View {
         )
         .ignoresSafeArea()
     }
+}
+
+/// Novedades versionadas (se muestra en Ajustes → Novedades).
+private enum NotchNews {
+    static let version = "v0.6.0"
+
+    struct Release: Identifiable {
+        let version: String
+        let date: String
+        let bullets: [String] // claves i18n
+        var id: String { version }
+    }
+
+    static let releases: [Release] = [
+        Release(version: "v0.6.0", date: "22 nov 2026", bullets: [
+            "news.v060a", "news.v060b", "news.v060c", "news.v060d"]),
+        Release(version: "v0.5.0", date: "21 nov 2026", bullets: [
+            "news.v050a", "news.v050b", "news.v050c", "news.v050d"]),
+        Release(version: "v0.4.0", date: "21 nov 2026", bullets: [
+            "news.v040a", "news.v040b", "news.v040c", "news.v040d"]),
+        Release(version: "v0.3.0", date: "20 nov 2026", bullets: [
+            "news.v030a", "news.v030b"]),
+        Release(version: "v0.2.0", date: "19 nov 2026", bullets: [
+            "news.v020a", "news.v020b", "news.v020c"]),
+        Release(version: "v0.1.0", date: "19 nov 2026", bullets: [
+            "news.v010a", "news.v010b"]),
+    ]
 }
 
 extension Color {
