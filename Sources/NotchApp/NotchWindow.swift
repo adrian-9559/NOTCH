@@ -57,27 +57,30 @@ final class NotchWindowController {
 
     func toggle(anchorX: CGFloat? = nil, topY: CGFloat? = nil) { visible ? hide() : show(anchorX: anchorX, topY: topY) }
 
-    /// Aparece cayendo desde el notch: el desplazamiento de ventana entera
-    /// lo hace el compositor (sin relayout), así no se entrecorta.
+    /// Aparece deslizándose desde el notch con una curva suave de
+    /// deceleración larga (sin el golpe del easeOut corto): caída de
+    ///10 pt + fundido en0,42 s.
     func show(anchorX: CGFloat? = nil, topY: CGFloat? = nil) {
         reposition(anchorX: anchorX, topY: topY)
         let final = panel.frame
         var start = final
-        start.origin.y += 14
+        start.origin.y += 10
         panel.setFrame(start, display: false)
         panel.orderFrontRegardless()
         panel.alphaValue = 0
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.22
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            ctx.duration = 0.42
+            // easeOutQuint: arranca rápido y aterriza muy suave.
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
             panel.animator().setFrameOrigin(final.origin)
             panel.animator().alphaValue = 1
         }
         visible = true
     }
 
+    /// Se retira con fundido y una micro-subida (0,22 s, ease-in suave).
     func hide() {
-        let up = panel.frame.origin.applying(CGAffineTransform(translationX: 0, y: 10))
+        let up = panel.frame.origin.applying(CGAffineTransform(translationX: 0, y: 8))
         // Marca la orden de ocultar: si mientras corre la animación se
         // vuelve a mostrar (clic + hover), el cierre viejo NO debe
         // ordenar fuera el panel recién abierto (lo dejaría "visible"
@@ -85,8 +88,8 @@ final class NotchWindowController {
         hideToken += 1
         let token = hideToken
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.15
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            ctx.duration = 0.22
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.4, 0, 0.2, 1)
             panel.animator().setFrameOrigin(up)
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in

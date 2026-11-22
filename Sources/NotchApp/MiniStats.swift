@@ -621,7 +621,9 @@ struct StatsView: View {
                 }
                 Spacer()
             }
-            LazyVGrid(columns: [GridItem(.flexible())], spacing: 4) {
+            // Dos columnas: la batería deja de ser el bloque más alto
+            // de la tarjeta (menos saturación, mismo dato).
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4)], spacing: 4) {
                 battCell(tr("mac.health"), battHealthText, battHealthColor)
                 battCell(tr("mac.cycles"), snap.batt.cycles > 0 ? "\(snap.batt.cycles)" : "—", .white.opacity(0.85))
                 battCell(tr("mac.power"), snap.batt.watts == 0 ? "—" : String(format: "%+.0f W", snap.batt.watts), .white.opacity(0.85))
@@ -744,11 +746,18 @@ struct StatsView: View {
     }
 
     private func battCell(_ label: String, _ value: String, _ color: Color) -> some View {
-        HStack(spacing: 6) {
-            Text(label).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.45))
-            Spacer()
-            Text(value).font(.notchMono(11)).foregroundStyle(color).monospacedDigit()
+        // Etiqueta sobre valor: en media columna no se parte la palabra.
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label)
+                .font(.notchMono(9))
+                .foregroundStyle(Color.white.opacity(0.45))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(value)
+                .font(.notchMono(11)).foregroundStyle(color).monospacedDigit()
+                .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 8).padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
     }

@@ -151,7 +151,8 @@ final class NotchLightsController {
         updateVisibility()
     }
 
-    /// La píldora estorba con el panel abierto o con el aviso: fuera.
+    /// La píldora estorba con el panel abierto o con el aviso: fuera
+    /// con fundido (nada de aparecer/desaparecer de golpe).
     func setPanelOpen(_ open: Bool) {
         panelOpen = open
         updateVisibility()
@@ -164,10 +165,30 @@ final class NotchLightsController {
 
     private func updateVisibility() {
         let show = hasSong && !panelOpen && !toastShowing
-        if show {
-            panels.forEach { $0.orderFrontRegardless() }
-        } else {
-            panels.forEach { $0.orderOut(nil) }
+        for p in panels {
+            if show {
+                guard p.alphaValue < 0.99 else { continue }
+                p.orderFrontRegardless()
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.3
+                    ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+                    p.animator().alphaValue = 1
+                }
+            } else {
+                guard p.alphaValue > 0.01 else {
+                    p.orderOut(nil)
+                    continue
+                }
+                NSAnimationContext.runAnimationGroup({ ctx in
+                    ctx.duration = 0.2
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                    p.animator().alphaValue = 0
+                }, completionHandler: {
+                    // Solo ordena fuera si sigue oculta (evita que un
+                    // fundido de entrada reciente la apague otra vez).
+                    if p.alphaValue < 0.01 { p.orderOut(nil) }
+                })
+            }
         }
     }
 

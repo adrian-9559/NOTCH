@@ -508,10 +508,7 @@ struct WeatherView: View {
 
     private var hourlyCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(tr("wthr.hourly"))
-                .font(.notchMono(10))
-                .foregroundStyle(Color.white.opacity(0.5))
-                .kerning(1.2)
+            NotchTag(icon: "clock", text: tr("wthr.hourly"), color: tint)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     ForEach(Array(store.hours.enumerated()), id: \.element.date) { i, h in
@@ -566,10 +563,7 @@ struct WeatherView: View {
         let gmax = (store.days.map(\.tmax).max() ?? 1)
         let span = max(1, gmax - gmin)
         return VStack(alignment: .leading, spacing: 6) {
-            Text(tr("wthr.days"))
-                .font(.notchMono(10))
-                .foregroundStyle(Color.white.opacity(0.5))
-                .kerning(1.2)
+            NotchTag(icon: "calendar", text: tr("wthr.days"), color: tint)
             ForEach(Array(store.days.enumerated()), id: \.element.date) { i, d in
                 HStack(spacing: 8) {
                     Text(dayName(d.date))

@@ -96,22 +96,11 @@ struct ClipboardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Image(systemName: "clipboard.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(settings.accent)
-                Text(tr("clip.title"))
-                    .font(.notchMono(10))
-                    .foregroundStyle(Color.white.opacity(0.55))
-                    .kerning(1.2)
-                if !store.clips.isEmpty {
-                    Text("\(store.clips.count)")
-                        .font(.notchMono(9))
-                        .foregroundStyle(Color.white.opacity(0.5))
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(Capsule().fill(Color.white.opacity(0.1)))
-                        .monospacedDigit()
-                }
-                Spacer()
+                NotchTag(
+                    icon: "clipboard.fill", text: tr("clip.title"),
+                    color: settings.accent,
+                    trailing: store.clips.isEmpty ? nil : "\(store.clips.count)"
+                )
                 Button(tr("clip.clear")) { store.clear() }
                     .buttonStyle(NotchGhostButton(size: .mini))
                     .disabled(store.clips.isEmpty)

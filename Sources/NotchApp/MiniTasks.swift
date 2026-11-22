@@ -250,25 +250,24 @@ struct TasksView: View {
         shown.filter { $0.status == st }
     }
 
-    /// Cabecera de sección estilo Linear: punto + nombre + contador.
-    private func sectionHeader(_ title: String, count: Int, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text(title.uppercased())
-                .font(.notchMono(10))
-                .foregroundStyle(Color.white.opacity(0.55))
-                .kerning(1.2)
-            Text("\(count)")
-                .font(.notchMono(10))
-                .foregroundStyle(Color.white.opacity(0.35))
-                .monospacedDigit()
-        }
+    /// Cabecera de sección con chip de icono (mismo lenguaje que
+    /// NotchTag en el resto del panel).
+    private func sectionHeader(_ title: String, icon: String, count: Int, color: Color) -> some View {
+        NotchTag(icon: icon, text: title, color: color, trailing: "\(count)")
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Cabecera: título + abiertas + hoy + añadir rápido.
+        VStack(alignment: .leading, spacing: 10) {
+            // Cabecera: chip + título + abiertas + hoy + añadir rápido.
             HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(settings.accent.opacity(0.16))
+                        .frame(width: 18, height: 18)
+                    Image(systemName: "checklist")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(settings.accent)
+                }
                 Text(tr("task.title"))
                     .font(.notchMono(13))
                     .foregroundStyle(.white.opacity(0.92))
@@ -679,7 +678,7 @@ struct TasksView: View {
             let todos = inStatus(.todo), doings = inStatus(.doing)
             let dones = inStatus(.done), archived = inStatus(.archived)
             if !doings.isEmpty {
-                sectionHeader(tr("task.doing"), count: doings.count, color: settings.accent)
+                sectionHeader(tr("task.doing"), icon: "arrow.right", count: doings.count, color: settings.accent)
                 ForEach(doings) { task in
                     TaskRow(
                         task: task, store: tasks,
@@ -689,7 +688,7 @@ struct TasksView: View {
                 }
             }
             if !todos.isEmpty {
-                sectionHeader(tr("task.todo"), count: todos.count, color: Color.white.opacity(0.5))
+                sectionHeader(tr("task.todo"), icon: "circle", count: todos.count, color: Color.white.opacity(0.5))
                 ForEach(todos) { task in
                     TaskRow(
                         task: task, store: tasks,
@@ -699,7 +698,7 @@ struct TasksView: View {
                 }
             }
             if !dones.isEmpty {
-                sectionHeader(tr("task.done"), count: dones.count, color: Color(hex: "2F9E6E"))
+                sectionHeader(tr("task.done"), icon: "checkmark", count: dones.count, color: Color(hex: "2F9E6E"))
                 ForEach(dones) { task in
                     TaskRow(
                         task: task, store: tasks,

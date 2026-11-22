@@ -117,7 +117,10 @@ struct ActivityView: View {
             )
             .frame(maxWidth: 260)
 
-            let rows = store.activeSecondsPerAgent(since: since)
+            // Solo uso real: mínimo60 s en el periodo. Detecciones
+            // accidentales de segundos no aparecen (ni su tiempo en el
+            // total). Si no has usado nada, se muestra el vacío.
+            let rows = store.activeSecondsPerAgent(since: since).filter { $0.seconds >= 60 }
             let total = rows.reduce(0.0) { $0 + $1.seconds }
 
             heroCard(total: total)
