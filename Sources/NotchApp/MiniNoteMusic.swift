@@ -32,6 +32,7 @@ final class QuickNoteStore: ObservableObject {
                 .appendingPathComponent("\(df.string(from: Date())).md")
             append(line, to: daily)
         }
+        recentCache = nil // el fichero acaba de cambiar
         lastSaved = tr("note.saved")
     }
 
@@ -52,15 +53,30 @@ final class QuickNoteStore: ObservableObject {
         return dir.appendingPathComponent("notes.md")
     }
 
+    private var recentCache: (limit: Int, at: Date, notes: [(date: Date, text: String)])?
+
     /// Últimas notas guardadas (de Lumio): para verlas sin abrir nada.
+    /// Caché corto: el cuerpo de la vista se re-evalúa con cada tecla y
+    /// releer el fichero por pulsación iba lag.
     func recentNotes(limit: Int = 5) -> [(date: Date, text: String)] {
-        guard let raw = try? String(contentsOf: lumioFile(), encoding: .utf8) else { return [] }
-        return Self.parseNotes(raw, limit: limit)
+        if let c = recentCache, c.limit == limit, Date().timeIntervalSince(c.at) < 1.5 {
+            return c.notes
+        }
+        let notes: [(date: Date, text: String)]
+        if let raw = try? String(contentsOf: lumioFile(), encoding: .utf8) {
+            notes = Self.parseNotes(raw, limit: limit)
+        } else {
+            notes = []
+        }
+        recentCache = (limit, Date(), notes)
+        return notes
     }
 
     /// Parsea líneas "[timestamp] texto" (más nuevas primero). Pura → testeable.
+    private static let isoNotes = ISO8601DateFormatter()
+
     static func parseNotes(_ raw: String, limit: Int = 5) -> [(date: Date, text: String)] {
-        let iso = ISO8601DateFormatter()
+        let iso = isoNotes
         var out: [(Date, String)] = []
         for line in raw.split(separator: "\n").reversed() {
             guard line.hasPrefix("["), let end = line.firstIndex(of: "]") else { continue }
@@ -196,11 +212,9 @@ struct QuickNoteView: View {
 
     private func shortWhen(_ d: Date) -> String {
         let cal = Calendar.current
-        let f = DateFormatter(); f.locale = .current
-        if cal.isDateInToday(d) { f.dateFormat = "HH:mm"; return f.string(from: d) }
+        if cal.isDateInToday(d) { return NotchDateFmt.hourMinute.string(from: d) }
         if cal.isDateInYesterday(d) { return tr("act.yesterday") }
-        f.dateStyle = .short; f.timeStyle = .none
-        return f.string(from: d)
+        return NotchDateFmt.dayShortStyle.string(from: d)
     }
 }
 

@@ -168,11 +168,9 @@ struct ClipboardView: View {
 
     private func shortWhen(_ d: Date) -> String {
         let cal = Calendar.current
-        let f = DateFormatter(); f.locale = .current
-        if cal.isDateInToday(d) { f.dateFormat = "HH:mm"; return f.string(from: d) }
+        if cal.isDateInToday(d) { return NotchDateFmt.hourMinute.string(from: d) }
         if cal.isDateInYesterday(d) { return tr("act.yesterday") }
-        f.dateStyle = .short; f.timeStyle = .none
-        return f.string(from: d)
+        return NotchDateFmt.dayShortStyle.string(from: d)
     }
 }
 

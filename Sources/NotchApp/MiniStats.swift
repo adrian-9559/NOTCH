@@ -817,10 +817,7 @@ struct DayChart: View {
     private func hourLabel(_ back: Int) -> String {
         // back = horas hacia atrás desde ahora (0 = hora actual).
         let d = Date().addingTimeInterval(-Double(back) * 3600)
-        let f = DateFormatter()
-        f.locale = .current
-        f.dateFormat = "H"
-        return f.string(from: d) + "h"
+        return NotchDateFmt.hourOnly.string(from: d) + "h"
     }
 }
 
@@ -1025,9 +1022,14 @@ final class JunkStore: ObservableObject {
         ]
     }
 
-    /// Mide con `du` en background (rápido, sin permisos).
-    func scan() {
+    private var lastScan = Date.distantPast
+
+    /// Mide con `du` en background (rápido, sin permisos). Con TTL:
+    /// entrar en la pestaña Mac no relanza `du` cada vez.
+    func scan(force: Bool = false) {
+        guard !scanning, force || Date().timeIntervalSince(lastScan) > 60 else { return }
         scanning = true
+        lastScan = Date()
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             var out: [JunkRow] = []
@@ -1082,7 +1084,7 @@ final class JunkStore: ObservableObject {
         lastCleaned = r.failed == 0
             ? "\(row.agent)/\(row.label) \(tr("mac.toTrash"))"
             : tr("mac.trashFails", r.failed)
-        scan()
+        scan(force: true)
     }
 
     func trashAll() {
@@ -1091,7 +1093,7 @@ final class JunkStore: ObservableObject {
         lastCleaned = r.failed == 0
             ? "\(Self.formatBytes(allBytes)) \(tr("mac.toTrash"))"
             : tr("mac.trashFails", r.failed)
-        scan()
+        scan(force: true)
     }
 
     var allBytes: Int64 { rows.reduce(0) { $0 + $1.bytes } }

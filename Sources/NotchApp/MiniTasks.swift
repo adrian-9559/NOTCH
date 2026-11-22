@@ -489,8 +489,7 @@ struct TasksView: View {
         let sys = systemEventDays()
         let today = cal.startOfDay(for: Date())
         let monthName: String = {
-            let f = DateFormatter(); f.locale = .current; f.dateFormat = "LLLL"
-            return f.string(from: first).capitalized
+            return NotchDateFmt.monthLong.string(from: first).capitalized
         }()
         let year = String(cal.component(.year, from: first))
         return VStack(spacing: 8) {
@@ -640,17 +639,12 @@ struct TasksView: View {
     }
 
     private func dayTitle(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = .current
-        let cal = Calendar.current
-        if cal.isDateInToday(d) { return tr("act.today") }
-        f.dateStyle = .medium; f.timeStyle = .none
-        return f.string(from: d)
+        if Calendar.current.isDateInToday(d) { return tr("act.today") }
+        return NotchDateFmt.dayMedium.string(from: d)
     }
 
     private func hourRange(_ e: CalEvent) -> String {
-        let f = DateFormatter(); f.locale = .current
-        f.dateFormat = "HH:mm"
-        return "\(f.string(from: e.start))–\(f.string(from: e.end))"
+        return "\(NotchDateFmt.hourMinute.string(from: e.start))–\(NotchDateFmt.hourMinute.string(from: e.end))"
     }
 
     // MARK: - Secciones por estado
@@ -796,9 +790,7 @@ private struct TaskRow: View {
         let cal = Calendar.current
         if cal.isDateInToday(d) { return tr("task.today") }
         if cal.isDateInTomorrow(d) { return tr("task.tomorrow") }
-        let f = DateFormatter(); f.locale = .current
-        f.dateStyle = .short; f.timeStyle = .none
-        return f.string(from: d)
+        return NotchDateFmt.dayShortStyle.string(from: d)
     }
 
     var body: some View {
@@ -955,10 +947,8 @@ private struct TaskRow: View {
     }
 
     private func shortTime(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = .current
-        if Calendar.current.isDateInToday(d) { f.dateFormat = "HH:mm"; return f.string(from: d) }
-        f.dateStyle = .short; f.timeStyle = .short
-        return f.string(from: d)
+        if Calendar.current.isDateInToday(d) { return NotchDateFmt.hourMinute.string(from: d) }
+        return NotchDateFmt.dayShortTime.string(from: d)
     }
 
     private func advance() {

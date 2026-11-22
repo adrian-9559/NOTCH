@@ -84,6 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         installClipboard()
         installReminders()
 
+        // Precargas fuera del hilo principal: el historial (JSONL) y el
+        // clima con ciudad guardada. Así entrar en Actividad, Mac o el
+        // notch no espera lecturas de disco (lag al cambiar de pestaña).
+        DispatchQueue.global(qos: .utility).async { HistoryStore.shared.load() }
+        WeatherStore.shared.silentRefresh()
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(screensChanged),

@@ -118,6 +118,8 @@ struct NotchLightsView: View {
 
 final class NotchLightsController {
     private var panels: [NSPanel] = []
+    /// Tira de clima en el notch cerrado (cuando no hay píldora).
+    private var weatherPanels: [NSPanel] = []
     private var cancellables = Set<AnyCancellable>()
     /// Último estado musical visto (para combinar con panel/toast).
     private var hasSong = false
@@ -129,8 +131,12 @@ final class NotchLightsController {
     func rebuild(notches: [ScreenNotch], onTap: @escaping () -> Void) {
         panels.forEach { $0.orderOut(nil) }
         panels = []
+        weatherPanels.forEach { $0.orderOut(nil) }
+        weatherPanels = []
         for entry in notches where entry.layout.hasNotch {
             let n = entry.layout.notchRect
+            // Tira de clima dentro del notch (detrás de la píldora).
+            weatherPanels.append(makeStripPanel(frame: n))
             // Centrada en el notch, pegada arriba: como si saliera de él.
             let w: CGFloat = 300, h: CGFloat = 40
             let frame = NSRect(x: n.midX - w / 2, y: n.maxY - h, width: w, height: h)
@@ -164,8 +170,18 @@ final class NotchLightsController {
     }
 
     private func updateVisibility() {
-        let show = hasSong && !panelOpen && !toastShowing
-        for p in panels {
+        let pillOn = hasSong && !panelOpen && !toastShowing
+        // Sin canción reproduciéndose: el notch lleva el clima
+        // (icono a la izquierda, temperatura a la derecha).
+        let stripOn = !pillOn && !panelOpen && !toastShowing
+        // La tira primero y la píldora después: si se cruzan en un
+        // fundido, la píldora queda encima.
+        fade(weatherPanels, show: stripOn)
+        fade(panels, show: pillOn)
+    }
+
+    private func fade(_ list: [NSPanel], show: Bool) {
+        for p in list {
             if show {
                 guard p.alphaValue < 0.99 else { continue }
                 p.orderFrontRegardless()
@@ -195,6 +211,8 @@ final class NotchLightsController {
     func hide() {
         panels.forEach { $0.orderOut(nil) }
         panels = []
+        weatherPanels.forEach { $0.orderOut(nil) }
+        weatherPanels = []
     }
 
     /// Frames en pantalla de las píldoras visibles (vacío si oculta).
@@ -218,9 +236,59 @@ final class NotchLightsController {
         p.level = .screenSaver
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         p.hidesOnDeactivate = false
+        p.alphaValue = 0
         p.ignoresMouseEvents = false
         p.contentView = FirstMouseHostingView(rootView: NotchLightsView(onTap: onTap))
         return p
+    }
+
+    /// Ventana de clima: mismo rectángulo que el notch, solo lectura.
+    private func makeStripPanel(frame: NSRect) -> NSPanel {
+        let p = NSPanel(
+            contentRect: frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = false
+        p.level = .screenSaver
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        p.hidesOnDeactivate = false
+        p.alphaValue = 0
+        // Solo lectura: no intercepta clics de la barra de menús.
+        p.ignoresMouseEvents = true
+        p.contentView = NSHostingView(rootView: NotchWeatherStripView())
+        return p
+    }
+}
+
+/// Clima en el notch cerrado: icono a la izquierda, temperatura a la
+/// derecha. Se muestra cuando no hay píldora de música.
+struct NotchWeatherStripView: View {
+    @ObservedObject private var w = WeatherStore.shared
+
+    var body: some View {
+        HStack {
+            if w.temp != nil, let c = w.code {
+                Image(systemName: weatherIcon(c))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(weatherTint(c, fallback: NotchSettings.shared.accent))
+            }
+            Spacer(minLength: 0)
+            if let t = w.temp {
+                Text("\(Int(t.rounded()))°")
+                    .font(.notchMono(14))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .monospacedDigit()
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Sin datos aún: invisible (el fundido del panel ya lo oculta).
+        .opacity(w.temp == nil ? 0 : 1)
+        .animation(.easeInOut(duration: 0.35), value: w.temp == nil)
     }
 }
 #endif

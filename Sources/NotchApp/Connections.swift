@@ -164,6 +164,10 @@ struct WeatherPlace: Codable, Identifiable, Equatable {
 }
 
 final class WeatherStore: ObservableObject {
+    /// Instancia única: la pestaña Tiempo y el notch comparten datos
+    /// (entrar en la pestaña ya no vuelve a cargar desde cero).
+    static let shared = WeatherStore()
+
     @Published var place = ""
     @Published var temp: Double?
     @Published var code: Int?
@@ -180,7 +184,26 @@ final class WeatherStore: ObservableObject {
 
     private let loc = LocationService()
     private var timer: Timer?
+    private var refreshTimer: Timer?
     private static let placesKey = "notchWeatherPlaces"
+
+    private init() {
+        startClock()
+        // Refresco silencioso cada15 min. Solo con ciudad guardada:
+        // nunca pide permisos por sorpresa al arrancar (el consentimiento
+        // de ubicación se pide al entrar en la pestaña Tiempo).
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 900, repeats: true) { [weak self] _ in
+            self?.silentRefresh()
+        }
+    }
+
+    /// Recarga el parte si hay ciudad guardada (sin tocar permisos).
+    func silentRefresh() {
+        guard let lat = savedLat,
+              let lon = UserDefaults.standard.object(forKey: "notchWeatherLon") as? Double else { return }
+        let city = UserDefaults.standard.string(forKey: "notchWeatherCity") ?? ""
+        fetch(lat: lat, lon: lon, place: city)
+    }
 
     private var savedLat: Double? {
         UserDefaults.standard.object(forKey: "notchWeatherLat") as? Double
@@ -385,23 +408,13 @@ final class WeatherStore: ObservableObject {
 /// Hora local del lugar + clima (Open-Meteo, sin clave). Ubicación con
 /// consentimiento o ciudad manual (se recuerda).
 struct WeatherView: View {
-    @StateObject private var store = WeatherStore()
+    @ObservedObject private var store = WeatherStore.shared
     @ObservedObject private var settings = NotchSettings.shared
     @State private var query = ""
 
     /// Tinte del estado del tiempo (hero y contornos).
     private var tint: Color {
-        guard let c = store.code else { return settings.accent }
-        switch c {
-        case 0, 1: return Color(hex: "F2B33D")
-        case 2: return Color(hex: "E8A33D")
-        case 3: return Color(hex: "8FA3BF")
-        case 45, 48: return Color(hex: "9AA7B8")
-        case 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82: return Color(hex: "4C8FD8")
-        case 71, 73, 75, 77, 85, 86: return Color(hex: "7FC4E8")
-        case 95, 96, 99: return Color(hex: "9B7BE8")
-        default: return settings.accent
-        }
+        store.code.map { weatherTint($0, fallback: settings.accent) } ?? settings.accent
     }
 
     var body: some View {
@@ -464,10 +477,8 @@ struct WeatherView: View {
         .padding(8)
         .onAppear {
             store.loadPlaces()
-            store.startClock()
             store.loadDefault()
         }
-        .onDisappear { store.stopClock() }
     }
 
     // MARK: - Ahora: hora grande + estado + métricas
@@ -714,28 +725,28 @@ struct WeatherView: View {
 
     private func timeString(_ d: Date) -> String {
         // localTime ya lleva el desfase: se pinta en GMT tal cual.
-        let f = DateFormatter(); f.locale = .current
-        f.dateFormat = "HH:mm"
-        f.timeZone = TimeZone(secondsFromGMT: 0)
-        return f.string(from: d)
+        NotchDateFmt.hourMinuteGMT.string(from: d)
     }
 
     private func hourString(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = .current
-        f.dateFormat = "HH'h'"
-        return f.string(from: d)
+        NotchDateFmt.hourH.string(from: d)
     }
 
     private func dayName(_ d: Date) -> String {
         let cal = Calendar.current
         if cal.isDateInToday(d) { return tr("act.today") }
         if cal.isDateInTomorrow(d) { return tr("task.tomorrow") }
-        let f = DateFormatter(); f.locale = .current; f.dateFormat = "EEEE"
-        return f.string(from: d).capitalized
+        return NotchDateFmt.weekdayFull.string(from: d).capitalized
     }
 
     private func iconName(_ code: Int) -> String {
-        switch code {
+        weatherIcon(code)
+    }
+}
+
+/// Icono SF del parte: compartido por la pestaña Tiempo y el notch.
+func weatherIcon(_ code: Int) -> String {
+    switch code {
         case 0, 1: return "sun.max.fill"
         case 2: return "cloud.sun.fill"
         case 3: return "cloud.fill"
@@ -745,9 +756,24 @@ struct WeatherView: View {
         case 71, 73, 75, 77, 85, 86: return "cloud.snow.fill"
         case 95, 96, 99: return "cloud.bolt.rain.fill"
         default: return "cloud.fill"
-        }
     }
+}
 
+/// Tinte del estado del tiempo (hero, contornos y notch cerrado).
+func weatherTint(_ code: Int, fallback: Color) -> Color {
+    switch code {
+    case 0, 1: return Color(hex: "F2B33D")
+    case 2: return Color(hex: "E8A33D")
+    case 3: return Color(hex: "8FA3BF")
+    case 45, 48: return Color(hex: "9AA7B8")
+    case 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82: return Color(hex: "4C8FD8")
+    case 71, 73, 75, 77, 85, 86: return Color(hex: "7FC4E8")
+    case 95, 96, 99: return Color(hex: "9B7BE8")
+    default: return fallback
+    }
+}
+
+extension WeatherView {
     private func condName(_ code: Int) -> String {
         switch code {
         case 0, 1: return tr("wthr.clear")

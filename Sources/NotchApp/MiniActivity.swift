@@ -11,43 +11,54 @@ extension HistoryStore {
     static var retentionDays: Double {
         UserDefaults.standard.object(forKey: "notchHistoryDays") as? Double ?? 90
     }
-    /// Estados que cuentan como tiempo activo (como SessionStore.active).
-    private static let activeStatuses: Set<String> = ["working", "waiting"]
     /// Mínimo diario para que el día cuente en la racha.
     private static let streakMinimum: TimeInterval = 60
 
     /// Segundos activos por agente en [since, now], de más a menos.
+    /// Recorta los intervalos cacheados (sin re-parear eventos por render).
     func activeSecondsPerAgent(since: Date, now: Date = Date()) -> [(agent: String, seconds: TimeInterval)] {
         var out: [String: TimeInterval] = [:]
-        let scoped = events.filter { $0.ts >= since && $0.ts <= now }
-        for (agent, evs) in Dictionary(grouping: scoped, by: \.agent) {
-            var start: Date?
-            for e in evs.sorted(by: { $0.ts < $1.ts }) {
-                if Self.activeStatuses.contains(e.status) {
-                    if start == nil { start = e.ts }
-                } else if let s = start {
-                    out[agent, default: 0] += max(0, e.ts.timeIntervalSince(max(s, since)))
-                    start = nil
-                }
-            }
-            // Sigue activo ahora: cuenta hasta `now`.
-            if let s = start { out[agent, default: 0] += max(0, now.timeIntervalSince(max(s, since))) }
+        for iv in activeIntervals() {
+            let a = max(iv.start, since)
+            let b = min(iv.end ?? now, now)
+            if b > a { out[iv.agent, default: 0] += b.timeIntervalSince(a) }
         }
         return out.map { (agent: $0.key, seconds: $0.value) }.sorted { $0.seconds > $1.seconds }
     }
 
     func activeSecondsTotal(since: Date, now: Date = Date()) -> TimeInterval {
-        activeSecondsPerAgent(since: since, now: now).reduce(0) { $0 + $1.seconds }
+        var total: TimeInterval = 0
+        for iv in activeIntervals() {
+            let a = max(iv.start, since)
+            let b = min(iv.end ?? now, now)
+            if b > a { total += b.timeIntervalSince(a) }
+        }
+        return total
     }
 
-    /// Segundos activos por día (día → segundos), los últimos `days` días.
+    /// Segundos activos por día (día → segundos), los últimos `days`
+    /// días. Reparte los intervalos cacheados por día: una sola pasada
+    /// (antes: `days` filtros + agrupaciones sobre TODOS los eventos).
     func secondsPerDay(last days: Int, now: Date = Date()) -> [(day: Date, seconds: TimeInterval)] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: now)
+        var buckets: [Date: TimeInterval] = [:]
+        for iv in activeIntervals() {
+            let end = min(iv.end ?? now, now)
+            var cursor = cal.startOfDay(for: iv.start)
+            while cursor <= end {
+                let dayEnd = cal.date(byAdding: .day, value: 1, to: cursor) ?? now
+                let segStart = max(iv.start, cursor)
+                let segEnd = min(end, dayEnd)
+                if segEnd > segStart {
+                    buckets[cursor, default: 0] += segEnd.timeIntervalSince(segStart)
+                }
+                cursor = dayEnd
+            }
+        }
         return (0..<days).map { i in
             let d = cal.date(byAdding: .day, value: -i, to: today) ?? today
-            let end = cal.date(byAdding: .day, value: 1, to: d) ?? now
-            return (d, activeSecondsTotal(since: d, now: min(end, now)))
+            return (d, buckets[d] ?? 0)
         }
     }
 
@@ -412,13 +423,11 @@ struct ActivityView: View {
     private func monthMark(_ heat: [[HeatCell]], _ col: Int) -> String {
         let days = heat[col].compactMap(\.day)
         guard let d = days.first else { return " " }
-        let f = DateFormatter(); f.locale = .current; f.dateFormat = "MMM"
-        let label = f.string(from: d)
+        let label = NotchDateFmt.monthShort.string(from: d)
         if col == 0 { return label }
         let prevDays = heat[col - 1].compactMap(\.day)
         guard let p = prevDays.first else { return label }
-        let pf = DateFormatter(); pf.locale = .current; pf.dateFormat = "MMM"
-        return pf.string(from: p) == label ? " " : label
+        return NotchDateFmt.monthShort.string(from: p) == label ? " " : label
     }
 
     private func weekBest() -> (day: Date, seconds: TimeInterval)? {
@@ -431,8 +440,7 @@ struct ActivityView: View {
         let cal = Calendar.current
         if cal.isDateInToday(d) { return tr("act.today") }
         if cal.isDateInYesterday(d) { return tr("act.yesterday") }
-        let f = DateFormatter(); f.locale = .current; f.dateFormat = "EEE"
-        return f.string(from: d)
+        return NotchDateFmt.dayShort.string(from: d)
     }
 }
 #endif

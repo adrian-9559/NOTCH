@@ -16,6 +16,13 @@ final class HistoryStore: ObservableObject {
     static let shared = HistoryStore()
     @Published private(set) var events: [HistoryEvent] = []
     private var lastByAgent: [String: String] = [:]
+    /// Estados que cuentan como tiempo activo.
+    static let activeStatuses: Set<String> = ["working", "waiting"]
+    /// Revisión del conjunto de eventos (invalida las cachés).
+    private var rev = 0
+    /// Intervalos activos cacheados: el pareo de transiciones se hace
+    /// una vez por revisión (antes se rehacía en cada cálculo).
+    private var intervalsCache: (rev: Int, list: [(agent: String, start: Date, end: Date?)])?
 
     private func logFile() -> URL {
         let dir = FileManager.default.homeDirectoryForCurrentUser
@@ -53,14 +60,31 @@ final class HistoryStore: ObservableObject {
         // Ventana en memoria: últimos `retentionDays` (Actividad: mes + rachas).
         let cutoff = Date().addingTimeInterval(-Double(Self.retentionDays) * 86400)
         events = events.filter { $0.ts > cutoff }
+        rev += 1
     }
 
+    /// Carga el JSONL. Guardada: solo la primera vez — entrar en
+    /// Actividad o Mac releía y re-decodificaba el fichero entero cada
+    /// vez (lag al cambiar de pestaña). La primera carga puede llegar
+    /// en background desde el arranque.
     func load() {
+        guard events.isEmpty else { return }
         guard let data = try? Data(contentsOf: logFile()),
               !data.isEmpty else { return }
         let cutoff = Date().addingTimeInterval(-Double(Self.retentionDays) * 86400)
-        events = data.split(separator: UInt8(ascii: "\n")).compactMap { try? JSONDecoder().decode(HistoryEvent.self, from: Data($0)) }
+        let decoded = data.split(separator: UInt8(ascii: "\n")).compactMap { try? JSONDecoder().decode(HistoryEvent.self, from: Data($0)) }
             .filter { $0.ts > cutoff }
+        if Thread.isMainThread {
+            applyLoad(decoded)
+        } else {
+            DispatchQueue.main.async { [weak self] in self?.applyLoad(decoded) }
+        }
+    }
+
+    private func applyLoad(_ decoded: [HistoryEvent]) {
+        guard events.isEmpty else { return }
+        events = decoded
+        rev += 1
         for e in events { lastByAgent[e.agent] = e.status }
     }
 
@@ -68,7 +92,31 @@ final class HistoryStore: ObservableObject {
     func reset() {
         events = []
         lastByAgent = [:]
+        rev += 1
         try? FileManager.default.removeItem(at: logFile())
+    }
+
+    /// Intervalos activos (inicio de working → primer evento que no es
+    /// activo), por agente: los agentes trabajan a la vez, así que el
+    /// seguimiento es independiente por agente. `end == nil` sigue en
+    /// curso. Cacheado por revisión.
+    func activeIntervals() -> [(agent: String, start: Date, end: Date?)] {
+        if let c = intervalsCache, c.rev == rev { return c.list }
+        let sorted = events.sorted { $0.ts < $1.ts }
+        var out: [(agent: String, start: Date, end: Date?)] = []
+        var starts: [String: Date] = [:]
+        for e in sorted {
+            if Self.activeStatuses.contains(e.status) {
+                if starts[e.agent] == nil { starts[e.agent] = e.ts }
+            } else if let s = starts.removeValue(forKey: e.agent) {
+                out.append((agent: e.agent, start: s, end: e.ts))
+            }
+        }
+        for (agent, s) in starts {
+            out.append((agent: agent, start: s, end: nil))
+        }
+        intervalsCache = (rev, out)
+        return out
     }
 
     func hours(for day: Date) -> [(hour: Int, count: Int, agents: [String])] {
@@ -81,12 +129,15 @@ final class HistoryStore: ObservableObject {
     }
 
     /// Actividad por hora rodante (últimas 24 h) para la gráfica del hub.
+    /// Pasada única sobre los eventos (antes:24 filtros completos).
     func last24h(now: Date = Date()) -> [Int] {
-        (0..<24).map { back in
-            let start = now.addingTimeInterval(-Double(back + 1) * 3600)
-            let end = now.addingTimeInterval(-Double(back) * 3600)
-            return events.filter { $0.ts >= start && $0.ts < end && $0.status != "idle" }.count
-        }.reversed()
+        var buckets = [Int](repeating: 0, count: 24)
+        let hour: TimeInterval = 3600
+        for e in events where e.status != "idle" {
+            let back = Int(now.timeIntervalSince(e.ts) / hour)
+            if back >= 0 && back < 24 { buckets[23 - back] += 1 }
+        }
+        return buckets
     }
 }
 
