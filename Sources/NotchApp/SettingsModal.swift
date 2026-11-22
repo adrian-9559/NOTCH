@@ -43,7 +43,7 @@ final class SettingsWindowController: NSObject {
 
 /// Páginas del sidebar.
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case appearance, tabs, behavior, music, clipboard, data, language, about
+    case appearance, tabs, behavior, music, clipboard, connections, data, language, about
     var id: String { rawValue }
 
     var icon: String {
@@ -53,6 +53,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .behavior: return "cursorarrow.click.2"
         case .music: return "music.note"
         case .clipboard: return "clipboard.fill"
+        case .connections: return "link"
         case .data: return "externaldrive.fill"
         case .language: return "globe"
         case .about: return "lock.fill"
@@ -66,6 +67,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .behavior: return "set.behavior"
         case .music: return "set.music"
         case .clipboard: return "set.clipboard"
+        case .connections: return "set.connections"
         case .data: return "set.data"
         case .language: return "set.language"
         case .about: return "set.privacy"
@@ -82,6 +84,7 @@ struct SettingsModalView: View {
     @State private var vaultPath: String = UserDefaults.standard.string(forKey: "notchObsidianVault") ?? ""
     @State private var launchLogin = false
     @State private var storageSize = "—"
+    @ObservedObject private var calService = CalService.shared
 
     var body: some View {
         HStack(spacing: 0) {
@@ -205,6 +208,7 @@ struct SettingsModalView: View {
                     case .behavior: behaviorPage
                     case .music: musicPage
                     case .clipboard: clipboardPage
+                    case .connections: connectionsPage
                     case .data: dataPage
                     case .language: languagePage
                     case .about: aboutPage
@@ -491,6 +495,60 @@ struct SettingsModalView: View {
         }
     }
 
+    // MARK: - Conexiones
+
+    private var connectionsPage: some View {
+        VStack(spacing: 12) {
+            SettingsCard(label: tr("set.connections"), icon: "link", accent: settings.accent) {
+                VStack(spacing: 2) {
+                    ConnRow(
+                        icon: "calendar", title: tr("set.appleCal"), subtitle: tr("set.appleCalSub"),
+                        status: calService.auth == .granted ? tr("set.connected") : tr("set.disconnected"),
+                        ok: calService.auth == .granted,
+                        actionTitle: tr("set.connect"), accent: settings.accent
+                    ) {
+                        CalService.shared.requestAccess()
+                    }
+                    Divider().background(Color.white.opacity(0.07))
+                    IconToggleRow(icon: "calendar.badge.checkmark", label: tr("set.useSystemCal"), subtitle: tr("set.useSystemCalSub"), isOn: $settings.useSystemCalendar, accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    ConnRow(
+                        icon: "location.fill", title: tr("set.location"), subtitle: tr("set.locationSub"),
+                        status: settings.useLocation ? tr("set.on") : tr("set.off"),
+                        ok: settings.useLocation,
+                        actionTitle: settings.useLocation ? tr("set.off") : tr("set.on"), accent: settings.accent
+                    ) {
+                        settings.useLocation.toggle()
+                    }
+                }
+            }
+            SettingsCard(label: tr("set.externalCals"), icon: "envelope.fill", accent: settings.accent) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(tr("set.externalCalsSub"))
+                        .font(.caption2)
+                        .foregroundStyle(Color.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 6) {
+                        Button("Google") { openInternetAccounts() }
+                            .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
+                        Button("Outlook") { openInternetAccounts() }
+                            .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
+                        Button("Exchange") { openInternetAccounts() }
+                            .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
+                    }
+                }
+            }
+        }
+        .onAppear { CalService.shared.refreshStatus() }
+    }
+
+    private func openInternetAccounts() {
+        // Cuentas de Internet: lo sincronizado aparece en Calendario.
+        if let url = URL(string: "x-apple.systempreferences:") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     // MARK: - Datos
 
     private var dataPage: some View {
@@ -738,6 +796,44 @@ private struct DurationRow: View {
             .disabled(value >= range.upperBound)
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// Fila de conexión: icono + nombre + estado + botón de acción.
+private struct ConnRow: View {
+    var icon: String
+    var title: String
+    var subtitle: String
+    var status: String
+    var ok: Bool
+    var actionTitle: String
+    var accent: Color
+    var action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(ok ? accent.opacity(0.2) : Color.white.opacity(0.06))
+                    .frame(width: 28, height: 28)
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .foregroundStyle(ok ? accent : Color.white.opacity(0.45))
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.white.opacity(0.9))
+                Text(subtitle).font(.caption2).foregroundStyle(Color.white.opacity(0.45))
+            }
+            Spacer()
+            Text(status)
+                .font(.notchMono(9))
+                .foregroundStyle(ok ? Color.green : Color.white.opacity(0.45))
+                .padding(.horizontal, 7).padding(.vertical, 2)
+                .background(Capsule().fill(ok ? Color.green.opacity(0.12) : Color.white.opacity(0.07)))
+            Button(actionTitle, action: action)
+                .buttonStyle(NotchGhostButton(size: .mini, tint: accent))
+        }
+        .padding(.vertical, 4)
     }
 }
 

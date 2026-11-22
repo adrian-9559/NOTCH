@@ -132,9 +132,6 @@ struct NotchRootView: View {
                             if split < tabs.count {
                                 ForEach(split..<tabs.count, id: \.self) { i in navCell(i, tabs: tabs, sel: sel) }
                             }
-                            Text(store.active.isEmpty ? tr("nav.idle") : "\(store.active.count) \(tr("nav.active"))")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.white.opacity(0.8))
                             if taskStore.openCount > 0 {
                                 Text("\(taskStore.openCount) \(tr("task.title").lowercased())")
                                     .font(.system(size: 11))

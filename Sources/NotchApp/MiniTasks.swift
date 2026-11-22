@@ -313,6 +313,35 @@ struct TasksView: View {
                     Button(tr("task.clearDay")) { selectedDay = nil }
                         .buttonStyle(NotchGhostButton(size: .mini))
                 }
+                let dayEvents = CalService.shared.events(on: day)
+                if !dayEvents.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(dayEvents) { e in
+                            HStack(spacing: 8) {
+                                Circle().fill(Color(hex: "3E8BD8")).frame(width: 6, height: 6)
+                                Text(e.title.isEmpty ? tr("task.noTitle") : e.title)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.white.opacity(0.85))
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(e.isAllDay ? tr("task.allDay") : hourRange(e))
+                                    .font(.notchMono(9))
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(hex: "3E8BD8").opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color(hex: "3E8BD8").opacity(0.25), lineWidth: 1)
+                    )
+                }
             }
             taskSections
         }
@@ -422,6 +451,24 @@ struct TasksView: View {
         return out
     }
 
+    /// Días con eventos del sistema (calendario conectado): segundo punto.
+    private func systemEventDays() -> Set<Date> {
+        guard NotchSettings.shared.useSystemCalendar else { return [] }
+        let cal = Calendar.current
+        let start = cal.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+        let end = cal.date(byAdding: .month, value: 3, to: Date()) ?? Date()
+        return Set(CalService.shared.eventDays(from: start, to: end).map { cal.startOfDay(for: $0) })
+    }
+
+    /// Letras de día (L M X…) rotadas al primer día local.
+    private func weekdayLetters() -> [String] {
+        let cal = Calendar.current
+        var syms = cal.veryShortWeekdaySymbols // Dom Lun… (domingo primero)
+        let shift = (cal.firstWeekday - 1 + 7) % 7
+        syms = Array(syms[shift...] + syms[..<shift])
+        return syms
+    }
+
     private var monthCalendar: some View {
         let cal = Calendar.current
         let comps = cal.dateComponents([.year, .month], from: monthBase)
@@ -435,7 +482,12 @@ struct TasksView: View {
             return f.string(from: first).capitalized
         }()
         return VStack(spacing: 6) {
-            HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                Button { monthOffset -= 12 } label: {
+                    Image(systemName: "chevron.left.2").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
+                }
+                .buttonStyle(NotchGhostButton(size: .mini))
+                .help(String(Calendar.current.component(.year, from: monthBase) - 1))
                 Button { monthOffset -= 1 } label: {
                     Image(systemName: "chevron.left").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
                 }
@@ -455,25 +507,42 @@ struct TasksView: View {
                     Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
                 }
                 .buttonStyle(NotchGhostButton(size: .mini))
+                Button { monthOffset += 12 } label: {
+                    Image(systemName: "chevron.right.2").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
+                }
+                .buttonStyle(NotchGhostButton(size: .mini))
+                .help(String(Calendar.current.component(.year, from: monthBase) + 1))
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 2) {
+                ForEach(weekdayLetters(), id: \.self) { wd in
+                    Text(wd)
+                        .font(.notchMono(8))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                        .frame(maxWidth: .infinity)
+                }
                 ForEach(0..<lead, id: \.self) { _ in Color.clear.frame(height: 26) }
                 ForEach(range.lowerBound..<range.upperBound, id: \.self) { d in
                     let date = cal.date(byAdding: .day, value: d - 1, to: first) ?? first
                     let sod = cal.startOfDay(for: date)
                     let isSel = selectedDay.map { cal.isDate($0, inSameDayAs: date) } ?? false
                     let isToday = cal.isDate(sod, inSameDayAs: today)
+                    let isWeekend = cal.isDateInWeekend(date)
                     Button {
                         selectedDay = isSel ? nil : date
                     } label: {
                         VStack(spacing: 1) {
                             Text("\(d)")
                                 .font(.notchMono(10))
-                                .foregroundStyle(isSel ? .white : isToday ? settings.accent : Color.white.opacity(0.75))
+                                .foregroundStyle(isSel ? .white : isToday ? settings.accent : Color.white.opacity(isWeekend ? 0.4 : 0.75))
                                 .monospacedDigit()
-                            Circle()
-                                .fill(days.contains(sod) ? settings.accent : Color.clear)
-                                .frame(width: 4, height: 4)
+                            HStack(spacing: 2) {
+                                Circle()
+                                    .fill(days.contains(sod) ? settings.accent : Color.clear)
+                                    .frame(width: 4, height: 4)
+                                Circle()
+                                    .fill(systemEventDays().contains(sod) ? Color(hex: "3E8BD8") : Color.clear)
+                                    .frame(width: 4, height: 4)
+                            }
                         }
                         .frame(maxWidth: .infinity, minHeight: 26)
                         .background(
@@ -502,6 +571,12 @@ struct TasksView: View {
         if cal.isDateInToday(d) { return tr("act.today") }
         f.dateStyle = .medium; f.timeStyle = .none
         return f.string(from: d)
+    }
+
+    private func hourRange(_ e: CalEvent) -> String {
+        let f = DateFormatter(); f.locale = .current
+        f.dateFormat = "HH:mm"
+        return "\(f.string(from: e.start))–\(f.string(from: e.end))"
     }
 
     // MARK: - Secciones por estado

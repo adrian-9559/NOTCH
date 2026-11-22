@@ -10,7 +10,7 @@ final class NotchSettings: ObservableObject {
     static let defaultAccent = "A550A7"
     /// IDs de pestaña que la navbar puede mostrar (orden por defecto).
     /// Son IDs estables: el título visible sale de `NotchTab` (idioma).
-    static let tabTitles = ["shelf", "focus", "mac", "activity", "agents", "music", "notes", "tasks"]
+    static let tabTitles = ["shelf", "focus", "mac", "tiempo", "activity", "agents", "music", "notes", "tasks"]
 
     /// Color de acento en hex (#RRGGBB).
     @Published var accentHex: String {
@@ -76,6 +76,14 @@ final class NotchSettings: ObservableObject {
     @Published var remindersEnabled: Bool {
         didSet { save() }
     }
+    /// Eventos del calendario del sistema en Tareas (requiere permiso).
+    @Published var useSystemCalendar: Bool {
+        didSet { save() }
+    }
+    /// Ubicación para el tiempo (con consentimiento).
+    @Published var useLocation: Bool {
+        didSet { save() }
+    }
     /// Clips guardados en memoria.
     @Published var clipMax: Double {
         didSet { save() }
@@ -114,6 +122,8 @@ final class NotchSettings: ObservableObject {
         clipHotkeyEnabled = d.object(forKey: "notchClipHotkey") as? Bool ?? true
         clipAutoPaste = d.object(forKey: "notchClipAutoPaste") as? Bool ?? false
         remindersEnabled = d.object(forKey: "notchRemindersEnabled") as? Bool ?? true
+        useSystemCalendar = d.object(forKey: "notchUseSystemCalendar") as? Bool ?? false
+        useLocation = d.object(forKey: "notchUseLocation") as? Bool ?? false
         clipMax = d.object(forKey: "notchClipMax") as? Double ?? 30
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
@@ -162,6 +172,8 @@ final class NotchSettings: ObservableObject {
         d.set(clipHotkeyEnabled, forKey: "notchClipHotkey")
         d.set(clipAutoPaste, forKey: "notchClipAutoPaste")
         d.set(remindersEnabled, forKey: "notchRemindersEnabled")
+        d.set(useSystemCalendar, forKey: "notchUseSystemCalendar")
+        d.set(useLocation, forKey: "notchUseLocation")
         d.set(clipMax, forKey: "notchClipMax")
     }
 }
