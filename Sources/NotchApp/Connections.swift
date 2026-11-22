@@ -201,7 +201,11 @@ final class WeatherStore: ObservableObject {
             fetch(lat: lat, lon: lon, place: city)
             return
         }
-        guard NotchSettings.shared.useLocation else { return }
+        guard NotchSettings.shared.useLocation else {
+            // Sin lugar todavía: mostrar el estado "busca una ciudad".
+            error = true
+            return
+        }
         useCurrentLocation()
     }
 
@@ -335,6 +339,21 @@ struct WeatherView: View {
     @ObservedObject private var settings = NotchSettings.shared
     @State private var query = ""
 
+    /// Tinte del estado del tiempo (hero y contornos).
+    private var tint: Color {
+        guard let c = store.code else { return settings.accent }
+        switch c {
+        case 0, 1: return Color(hex: "F2B33D")
+        case 2: return Color(hex: "E8A33D")
+        case 3: return Color(hex: "8FA3BF")
+        case 45, 48: return Color(hex: "9AA7B8")
+        case 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82: return Color(hex: "4C8FD8")
+        case 71, 73, 75, 77, 85, 86: return Color(hex: "7FC4E8")
+        case 95, 96, 99: return Color(hex: "9B7BE8")
+        default: return settings.accent
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Buscador + ubicación.
@@ -355,129 +374,33 @@ struct WeatherView: View {
                 .disabled(!settings.useLocation)
             }
             if store.loading && store.temp == nil {
-                HStack(spacing: 8) {
+                VStack(spacing: 8) {
                     ProgressView().progressViewStyle(.circular).scaleEffect(0.7)
                     Text(tr("act.empty"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 20)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 22)
             } else if store.error && store.temp == nil {
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
+                    ZStack {
+                        Circle().fill(Color.white.opacity(0.06)).frame(width: 42, height: 42)
+                        Image(systemName: "cloud.slash")
+                            .font(.system(size: 17))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                    }
                     Text(tr("wthr.noLoc"))
                         .font(.caption).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                     Button(tr("wthr.retry")) { store.loadDefault() }
                         .buttonStyle(NotchGhostButton(size: .mini, tint: settings.accent))
-                        .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
             } else {
-                // Ahora: hora local grande + temperatura + estado.
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(timeString(store.localTime))
-                            .font(.notchMono(30))
-                            .foregroundStyle(.white)
-                            .monospacedDigit()
-                        Text(store.place.isEmpty ? "" : store.place)
-                            .font(.notchMono(10))
-                            .foregroundStyle(Color.white.opacity(0.45))
-                    }
-                    Spacer()
-                    if let c = store.code {
-                        Image(systemName: iconName(c))
-                            .font(.system(size: 26))
-                            .foregroundStyle(settings.accent)
-                    }
-                    if let t = store.temp {
-                        Text("\(Int(t.rounded()))°")
-                            .font(.notchMono(30))
-                            .foregroundStyle(.white)
-                            .monospacedDigit()
-                    }
-                }
-                .padding(12)
-                .background(wthrCard)
-                if let c = store.code {
-                    HStack(spacing: 6) {
-                        Text(condName(c))
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.9))
-                        Spacer()
-                        if let w = store.wind {
-                            Label("\(Int(w.rounded())) km/h", systemImage: "wind")
-                                .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-                        }
-                        if let h = store.humidity {
-                            Label("\(Int(h.rounded()))%", systemImage: "drop.fill")
-                                .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-                        }
-                    }
-                }
-                // Próximas horas.
-                if !store.hours.isEmpty {
-                    Text(tr("wthr.hourly"))
-                        .font(.notchMono(10))
-                        .foregroundStyle(Color.white.opacity(0.5))
-                        .kerning(1.2)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(store.hours, id: \.date) { h in
-                                VStack(spacing: 3) {
-                                    Text(hourString(h.date))
-                                        .font(.notchMono(9))
-                                        .foregroundStyle(Color.white.opacity(0.5))
-                                    Image(systemName: iconName(h.code))
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(settings.accent.opacity(0.9))
-                                    Text("\(Int(h.temp.rounded()))°")
-                                        .font(.notchMono(11))
-                                        .foregroundStyle(.white.opacity(0.9))
-                                        .monospacedDigit()
-                                }
-                                .frame(minWidth: 44)
-                            }
-                        }
-                    }
-                    .padding(10)
-                    .background(wthrCard)
-                }
-                // Próximos días.
-                if !store.days.isEmpty {
-                    Text(tr("wthr.days"))
-                        .font(.notchMono(10))
-                        .foregroundStyle(Color.white.opacity(0.5))
-                        .kerning(1.2)
-                    VStack(spacing: 0) {
-                        ForEach(store.days, id: \.date) { d in
-                            HStack(spacing: 8) {
-                                Text(dayName(d.date))
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Color.white.opacity(0.85))
-                                    .frame(width: 90, alignment: .leading)
-                                Image(systemName: iconName(d.code))
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(settings.accent.opacity(0.9))
-                                Spacer()
-                                Text("\(Int(d.tmin.rounded()))°")
-                                    .font(.notchMono(11))
-                                    .foregroundStyle(Color.white.opacity(0.45))
-                                    .monospacedDigit()
-                                Text("\(Int(d.tmax.rounded()))°")
-                                    .font(.notchMono(11))
-                                    .foregroundStyle(.white)
-                                    .monospacedDigit()
-                            }
-                            .padding(.vertical, 5)
-                            if d.date != store.days.last?.date {
-                                Divider().background(Color.white.opacity(0.07))
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 4)
-                    .background(wthrCard)
-                }
+                heroCard
+                if !store.hours.isEmpty { hourlyCard }
+                if !store.days.isEmpty { dailyCard }
             }
         }
         .padding(8)
@@ -488,13 +411,218 @@ struct WeatherView: View {
         .onDisappear { store.stopClock() }
     }
 
-    private var wthrCard: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.white.opacity(0.045))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-            )
+    // MARK: - Ahora: hora grande + estado + métricas
+
+    private var heroCard: some View {
+        NotchCard(accent: tint) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if !store.place.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "mappin.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(tint)
+                                Text(store.place)
+                                    .font(.notchMono(11))
+                                    .foregroundStyle(Color.white.opacity(0.55))
+                                    .lineLimit(1)
+                            }
+                        }
+                        Text(timeString(store.localTime))
+                            .font(.notchMono(36))
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+                            .kerning(1)
+                        if let c = store.code {
+                            Text(condName(c))
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.white.opacity(0.8))
+                        }
+                    }
+                    Spacer(minLength: 4)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        if let c = store.code {
+                            Image(systemName: iconName(c))
+                                .font(.system(size: 34))
+                                .foregroundStyle(tint)
+                                .shadow(color: tint.opacity(0.5), radius: 12)
+                                .padding(.bottom, 2)
+                        }
+                        if let t = store.temp {
+                            Text("\(Int(t.rounded()))°")
+                                .font(.notchMono(34))
+                                .foregroundStyle(.white)
+                                .monospacedDigit()
+                        }
+                    }
+                }
+                // Métricas en tres fichas.
+                HStack(spacing: 6) {
+                    metricTile(icon: "wind", label: tr("wthr.wind"),
+                               value: store.wind.map { "\(Int($0.rounded()))" } ?? "—", unit: "km/h")
+                    metricTile(icon: "drop.fill", label: tr("wthr.humidity"),
+                               value: store.humidity.map { "\(Int($0.rounded()))" } ?? "—", unit: "%")
+                    metricTile(icon: "arrow.up", label: tr("wthr.max"),
+                               value: store.days.first.map { "\(Int($0.tmax.rounded()))" } ?? "—", unit: "°")
+                }
+            }
+        }
+    }
+
+    private func metricTile(icon: String, label: String, value: String, unit: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundStyle(tint)
+                .frame(width: 24, height: 24)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint.opacity(0.14)))
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value)
+                    .font(.notchMono(13))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                Text(unit)
+                    .font(.notchMono(8))
+                    .foregroundStyle(Color.white.opacity(0.4))
+            }
+            Spacer(minLength: 0)
+            Text(label)
+                .font(.notchMono(9))
+                .foregroundStyle(Color.white.opacity(0.45))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 9).padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.black.opacity(0.22))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.07), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Próximas horas
+
+    private var hourlyCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(tr("wthr.hourly"))
+                .font(.notchMono(10))
+                .foregroundStyle(Color.white.opacity(0.5))
+                .kerning(1.2)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(Array(store.hours.enumerated()), id: \.element.date) { i, h in
+                        VStack(spacing: 4) {
+                            Text(i == 0 ? tr("wthr.now") : hourString(h.date))
+                                .font(.notchMono(9))
+                                .foregroundStyle(i == 0 ? settings.accent : Color.white.opacity(0.5))
+                            Image(systemName: iconName(h.code))
+                                .font(.system(size: 14))
+                                .foregroundStyle(i == 0 ? tint : tint.opacity(0.85))
+                            Text("\(Int(h.temp.rounded()))°")
+                                .font(.notchMono(12))
+                                .foregroundStyle(.white.opacity(0.92))
+                                .monospacedDigit()
+                        }
+                        .frame(minWidth: 46)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(i == 0 ? settings.accent.opacity(0.14) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(i == 0 ? settings.accent.opacity(0.4) : Color.clear, lineWidth: 1)
+                        )
+                        if i < store.hours.count - 1 {
+                            Rectangle().fill(Color.white.opacity(0.06)).frame(width: 1, height: 34)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(LinearGradient(colors: [Color.white.opacity(0.058), Color.white.opacity(0.028)],
+                                     startPoint: .top, endPoint: .bottom))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.13), Color.white.opacity(0.055)],
+                                             startPoint: .top, endPoint: .bottom), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
+    }
+
+    // MARK: - Próximos días (con barra de rango tipo Apple)
+
+    private var dailyCard: some View {
+        let gmin = (store.days.map(\.tmin).min() ?? 0)
+        let gmax = (store.days.map(\.tmax).max() ?? 1)
+        let span = max(1, gmax - gmin)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(tr("wthr.days"))
+                .font(.notchMono(10))
+                .foregroundStyle(Color.white.opacity(0.5))
+                .kerning(1.2)
+            ForEach(Array(store.days.enumerated()), id: \.element.date) { i, d in
+                HStack(spacing: 8) {
+                    Text(dayName(d.date))
+                        .font(.system(size: 12, weight: i == 0 ? .semibold : .regular))
+                        .foregroundStyle(Color.white.opacity(i == 0 ? 0.95 : 0.8))
+                        .frame(width: 84, alignment: .leading)
+                    Image(systemName: iconName(d.code))
+                        .font(.system(size: 12))
+                        .foregroundStyle(tint)
+                        .frame(width: 18)
+                    Text("\(Int(d.tmin.rounded()))°")
+                        .font(.notchMono(11))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                        .monospacedDigit()
+                        .frame(width: 30, alignment: .trailing)
+                    // Barra de rango min→max dentro del rango de la semana.
+                    GeometryReader { geo in
+                        let fracLow = CGFloat((d.tmin - gmin) / span)
+                        let fracHigh = CGFloat((d.tmax - gmin) / span)
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.09))
+                            Capsule()
+                                .fill(LinearGradient(
+                                    colors: [Color(hex: "4C8FD8"), Color(hex: "F2B33D")],
+                                    startPoint: .leading, endPoint: .trailing
+                                ))
+                                .frame(width: max(6, geo.size.width * (fracHigh - fracLow)))
+                                .offset(x: geo.size.width * fracLow)
+                        }
+                    }
+                    .frame(height: 6)
+                    Text("\(Int(d.tmax.rounded()))°")
+                        .font(.notchMono(11))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                        .frame(width: 30, alignment: .trailing)
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(LinearGradient(colors: [Color.white.opacity(0.058), Color.white.opacity(0.028)],
+                                     startPoint: .top, endPoint: .bottom))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.13), Color.white.opacity(0.055)],
+                                             startPoint: .top, endPoint: .bottom), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
     }
 
     private func timeString(_ d: Date) -> String {

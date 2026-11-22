@@ -255,4 +255,82 @@ struct NotchTextField: View {
         .animation(.snappy(duration: 0.18), value: focused)
     }
 }
+
+// MARK: - Tarjeta y rótulos compartidos
+
+/// Tarjeta base del panel: vidrio con degradado sutil (más luminoso
+/// arriba), filo en degradado y sombra suave. Unifica todas las
+/// pestañas bajo el mismo material.
+struct NotchCard<Content: View>: View {
+    /// Tinte sutil del acento en la cabecera (para tarjetas "hero").
+    var accent: Color? = nil
+    var padding: CGFloat = 12
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        // OJO: el contenido debe llegar como UNA vista. Si el
+        // @ViewBuilder tiene varios hijos (TupleView) directamente aquí,
+        // SwiftUI aplica estos modificadores POR HIJO y cada uno dibujaría
+        // su propia tarjeta (tarjeta partida). Los call sites envuelven su
+        // contenido en un VStack; este contenedor solo aporta spacing.
+        VStack(alignment: .leading, spacing: 8) { content }
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: accent.map {
+                                [$0.opacity(0.10), Color.white.opacity(0.035)]
+                            } ?? [Color.white.opacity(0.058), Color.white.opacity(0.028)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.13), Color.white.opacity(0.055)],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
+    }
+}
+
+/// Rótulo de sección: chip de icono + texto mono con tracking y
+/// contenido a la derecha opcional (recuento, estado…).
+struct NotchTag: View {
+    var icon: String
+    var text: String
+    var color: Color = .white
+    var trailing: String? = nil
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 18, height: 18)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(color.opacity(0.16))
+                )
+            Text(text.uppercased())
+                .font(.notchMono(10))
+                .foregroundStyle(Color.white.opacity(0.6))
+                .kerning(1.2)
+            Spacer(minLength: 4)
+            if let trailing {
+                Text(trailing)
+                    .font(.notchMono(10))
+                    .foregroundStyle(Color.white.opacity(0.38))
+                    .monospacedDigit()
+            }
+        }
+    }
+}
 #endif

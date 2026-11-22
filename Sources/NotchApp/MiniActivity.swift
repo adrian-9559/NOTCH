@@ -120,148 +120,222 @@ struct ActivityView: View {
             let rows = store.activeSecondsPerAgent(since: since)
             let total = rows.reduce(0.0) { $0 + $1.seconds }
 
-            // Cabecera: total grande + racha.
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(formatActive(total))
-                        .font(.notchMono(30))
-                        .foregroundStyle(.white)
-                        .monospacedDigit()
-                    Text(range == 0 ? tr("act.today") : range == 1 ? tr("act.days7") : tr("act.days30"))
-                        .font(.notchMono(10))
-                        .foregroundStyle(Color.white.opacity(0.45))
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.orange)
-                        Text("\(store.currentStreak())")
-                            .font(.notchMono(18))
-                            .foregroundStyle(.white)
-                            .monospacedDigit()
-                    }
-                    Text(tr("act.best", store.bestStreak()))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(12)
-            .background(actCard)
-
+            heroCard(total: total)
             if rows.isEmpty {
-                Text(tr("act.empty"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 10)
+                emptyState
             } else {
-                // Clasificación por agente con barra proporcional.
-                let top = max(rows[0].seconds, 1)
-                VStack(spacing: 0) {
-                    ForEach(Array(rows.prefix(8).enumerated()), id: \.element.agent) { i, r in
-                        HStack(spacing: 8) {
-                            Text(verbatim: "\(i + 1)")
-                                .font(.notchMono(10))
-                                .foregroundStyle(Color.white.opacity(0.35))
-                                .frame(width: 12, alignment: .trailing)
-                                .monospacedDigit()
-                            Circle()
-                                .fill(agentColor(for: r.agent, default: settings.accent))
-                                .frame(width: 8, height: 8)
-                            Text(r.agent)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.9))
-                                .lineLimit(1)
-                            Spacer()
-                            Text(formatActive(r.seconds))
-                                .font(.notchMono(11))
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        .padding(.vertical, 6)
-                        .background(
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .fill(agentColor(for: r.agent, default: settings.accent).opacity(0.16))
-                                        .frame(width: geo.size.width * CGFloat(r.seconds / top), height: 3)
-                                }
-                                .frame(maxHeight: .infinity, alignment: .bottom)
-                                .offset(y: 8)
-                            }
-                        )
-                    }
-                }
-                .padding(.horizontal, 12).padding(.vertical, 4)
-                .background(actCard)
+                rankingCard(rows: rows)
             }
-
-            // Heatmap GitHub: 12 semanas de ritmo de un vistazo.
-            let heat = heatColumns()
-            if heat.flatMap({ $0 }).contains(where: { $0.seconds > 0 }) {
-                let peak = max(heat.flatMap({ $0 }).map(\.seconds).max() ?? 1, 1)
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .top, spacing: 4) {
-                        ForEach(heat.indices, id: \.self) { c in
-                            VStack(spacing: 2) {
-                                Text(monthMark(heat, c))
-                                    .font(.notchMono(7))
-                                    .foregroundStyle(Color.white.opacity(0.35))
-                                    .frame(height: 9)
-                                VStack(spacing: 3) {
-                                    ForEach(heat[c].indices, id: \.self) { r in
-                                        let cell = heat[c][r]
-                                        if let d = cell.day {
-                                            RoundedRectangle(cornerRadius: 3)
-                                                .fill(heatColor(cell.seconds, peak: peak))
-                                                .frame(width: 21, height: 21)
-                                                .help("\(dayLabel(d)): \(formatActive(cell.seconds))")
-                                        } else {
-                                            RoundedRectangle(cornerRadius: 3)
-                                                .fill(Color.clear)
-                                                .frame(width: 21, height: 21)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    HStack(spacing: 4) {
-                        Text(tr("act.less"))
-                            .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
-                        ForEach(0..<5, id: \.self) { b in
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(b == 0 ? Color.white.opacity(0.08) : settings.accent.opacity([0.25, 0.45, 0.7, 1.0][b - 1]))
-                                .frame(width: 10, height: 10)
-                        }
-                        Text(tr("act.more"))
-                            .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
-                        Spacer()
-                        if let best = weekBest() {
-                            Text(tr("act.bestDay", dayLabel(best.day), formatActive(best.seconds)))
-                                .font(.notchMono(9))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(12)
-                .background(actCard)
-            }
+            heatmapCard
         }
         .padding(8)
         .onAppear { store.load() }
     }
 
-    private var actCard: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.white.opacity(0.045))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+    // MARK: - Cabecera: total + racha
+
+    private func heroCard(total: TimeInterval) -> some View {
+        NotchCard(accent: settings.accent) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tr("act.total"))
+                        .font(.notchMono(9))
+                        .foregroundStyle(Color.white.opacity(0.5))
+                        .kerning(1.4)
+                    Text(formatActive(total))
+                        .font(.notchMono(34))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                    Text(range == 0 ? tr("act.today") : range == 1 ? tr("act.days7") : tr("act.days30"))
+                        .font(.notchMono(10))
+                        .foregroundStyle(Color.white.opacity(0.42))
+                }
+                Spacer()
+                // Racha como ficha: llama + número + mejor.
+                VStack(spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.orange)
+                            .shadow(color: .orange.opacity(0.5), radius: 6)
+                        Text("\(store.currentStreak())")
+                            .font(.notchMono(22))
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+                    }
+                    Text(tr("act.best", store.bestStreak()))
+                        .font(.notchMono(9))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(Color.black.opacity(0.25))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 7) {
+            ZStack {
+                Circle().fill(Color.white.opacity(0.06)).frame(width: 40, height: 40)
+                Image(systemName: "chart.bar")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.35))
+            }
+            Text(tr("act.empty"))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 16)
+    }
+
+    // MARK: - Clasificación con relleno proporcional
+
+    private func rankingCard(rows: [(agent: String, seconds: TimeInterval)]) -> some View {
+        let top = max(rows[0].seconds, 1)
+        return NotchCard {
+            // Contenido en UNA vista (ver NotchCard): si fueran hijos
+            // sueltos del @ViewBuilder, la tarjeta se partiría.
+            VStack(alignment: .leading, spacing: 8) {
+                NotchTag(icon: "chart.bar.fill", text: tr("act.ranking"), color: settings.accent)
+                    .padding(.bottom, 2)
+                VStack(spacing: 3) {
+                ForEach(Array(rows.prefix(8).enumerated()), id: \.element.agent) { i, r in
+                    HStack(spacing: 9) {
+                        rankBadge(i)
+                        Circle()
+                            .fill(agentColor(for: r.agent, default: settings.accent))
+                            .frame(width: 8, height: 8)
+                        Text(r.agent)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(formatActive(r.seconds))
+                            .font(.notchMono(11))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .monospacedDigit()
+                    }
+                    .padding(.vertical, 6).padding(.horizontal, 8)
+                    .background(
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .fill(Color.white.opacity(0.03))
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .fill(agentColor(for: r.agent, default: settings.accent).opacity(0.16))
+                                    .frame(width: max(10, geo.size.width * CGFloat(r.seconds / top)))
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        }
+    }
+
+    /// Puesto: medalla en los tres primeros, número discreto después.
+    private func rankBadge(_ i: Int) -> some View {
+        let medal = [Color(hex: "F2B33D"), Color(hex: "C9CED6"), Color(hex: "D98A4E")]
+        return Text(verbatim: "\(i + 1)")
+            .font(.notchMono(10))
+            .foregroundStyle(i < 3 ? Color.black.opacity(0.75) : Color.white.opacity(0.4))
+            .monospacedDigit()
+            .frame(width: 18, height: 18)
+            .background(
+                Circle().fill(i < 3 ? medal[i] : Color.white.opacity(0.07))
             )
+            .overlay(
+                Circle().stroke(i < 3 ? Color.white.opacity(0.25) : Color.clear, lineWidth: 1)
+            )
+    }
+
+    // MARK: - Heatmap (GitHub): 12 semanas × 7 días, domingo primero.
+
+    private var heatmapCard: some View {
+        let heat = heatColumns()
+        let hasData = heat.flatMap { $0 }.contains { $0.seconds > 0 }
+        return NotchCard {
+            // Una sola vista (ver NotchCard): tag + rejilla juntos.
+            VStack(alignment: .leading, spacing: 8) {
+                NotchTag(icon: "square.grid.3x3.fill", text: tr("act.heat"), color: settings.accent)
+                if hasData {
+                let peak = max(heat.flatMap { $0 }.map(\.seconds).max() ?? 1, 1)
+                // Filas domingo primero: Lun/Mié/Vie en 1/3/5.
+                let wd = Calendar.current.veryShortWeekdaySymbols
+                HStack(alignment: .top, spacing: 5) {
+                    // Etiquetas de día (L X V) a la izquierda.
+                    VStack(spacing: 3) {
+                        ForEach(0..<7, id: \.self) { r in
+                            Text(r == 1 || r == 3 || r == 5 ? String(wd[r].prefix(1)) : " ")
+                                .font(.notchMono(7))
+                                .foregroundStyle(Color.white.opacity(0.35))
+                                .frame(height: 17)
+                        }
+                    }
+                    ForEach(heat.indices, id: \.self) { c in
+                        VStack(spacing: 3) {
+                            Text(monthMark(heat, c))
+                                .font(.notchMono(7))
+                                .foregroundStyle(Color.white.opacity(0.4))
+                                .frame(height: 10)
+                            VStack(spacing: 3) {
+                                ForEach(heat[c].indices, id: \.self) { r in
+                                    let cell = heat[c][r]
+                                    if let d = cell.day {
+                                        let isToday = Calendar.current.isDateInToday(d)
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .fill(heatColor(cell.seconds, peak: peak))
+                                            .frame(width: 17, height: 17)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 3)
+                                                    .stroke(isToday ? Color.white.opacity(0.7) : Color.white.opacity(0.05),
+                                                            lineWidth: isToday ? 1.2 : 1)
+                                            )
+                                            .help("\(dayLabel(d)): \(formatActive(cell.seconds))")
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .fill(Color.clear)
+                                            .frame(width: 17, height: 17)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 4) {
+                    Text(tr("act.less"))
+                        .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
+                    ForEach(0..<5, id: \.self) { b in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(b == 0 ? Color.white.opacity(0.08) : settings.accent.opacity([0.25, 0.45, 0.7, 1.0][b - 1]))
+                            .frame(width: 10, height: 10)
+                    }
+                    Text(tr("act.more"))
+                        .font(.notchMono(8)).foregroundStyle(Color.white.opacity(0.4))
+                    Spacer()
+                    if let best = weekBest() {
+                        Text(tr("act.bestDay", dayLabel(best.day), formatActive(best.seconds)))
+                            .font(.notchMono(9))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 4)
+            } else {
+                Text(tr("act.empty"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
+            }
+            }
+        }
     }
 
     // MARK: - Heatmap (GitHub): 12 semanas × 7 días, domingo primero.

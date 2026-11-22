@@ -194,6 +194,9 @@ enum MacPanelReader {
         let amps = num1(#""Amperage" = (-?\d+)"#) ?? 0
         let volts = num1(#""Voltage" = (\d+)"#) ?? 0
         b.watts = amps * volts / 1_000_000
+        // En batería ioreg a veces devuelve un crudo absurdo (acumulador
+        // sin signo): fuera de rango = sin dato (se muestra "—").
+        if abs(b.watts) > 500 { b.watts = 0 }
         b.minutesLeft = Int(num1(#""TimeRemaining" = (\d+)"#) ?? 0)
         b.charging = out.contains(#""IsCharging" = Yes"#)
         // Estima cuando macOS no informa (0 o absurdo).
@@ -363,8 +366,8 @@ struct StatsView: View {
         VStack(alignment: .leading, spacing: 10) {
             measurementsCard
             // Qué carga el Mac (plegable): tabla ordenable con buscador.
-            sectionHeader(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total", folded: $foldLoads)
-            if !foldLoads {
+            foldCard(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total",
+                     icon: "list.bullet.rectangle", folded: $foldLoads) {
                 loadBar
                 HStack(spacing: 6) {
                     NotchSegments(
@@ -413,16 +416,15 @@ struct StatsView: View {
                 }
             }
             // Actividad de agentes 24 h (del historial local).
-            sectionHeader(title: tr("mac.last24"), sub: "", folded: $foldDay)
-            if !foldDay {
+            foldCard(title: tr("mac.last24"), icon: "chart.bar.fill", folded: $foldDay) {
                 DayChart(hours: history.last24h())
             }
             // Servidores de agentes (máx. 5 + resto, como Lumio).
-            sectionHeader(
-                title: snap.servers.count > 5 ? "\(tr("mac.servers")) +\(snap.servers.count - 5)" : tr("mac.servers"),
-                folded: $foldServers
-            )
-            if !foldServers {
+            foldCard(
+                title: tr("mac.servers"),
+                sub: snap.servers.count > 5 ? "+\(snap.servers.count - 5)" : "",
+                icon: "network", folded: $foldServers
+            ) {
                 if snap.servers.isEmpty {
                     Text(tr("mac.noServers")).font(.caption).foregroundStyle(.secondary)
                 } else {
@@ -462,17 +464,61 @@ struct StatsView: View {
 
     // MARK: - piezas
 
+    /// Tarjeta plegable con cabecera clicable (icono + rótulo + dato).
+    private func foldCard<Content: View>(
+        title: String, sub: String = "", icon: String,
+        folded: Binding<Bool>,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        NotchCard {
+            // Una sola vista (ver NotchCard): cabecera + contenido.
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    withAnimation(.snappy(duration: 0.18)) { folded.wrappedValue.toggle() }
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: icon)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Color.white.opacity(0.7))
+                            .frame(width: 18, height: 18)
+                            .background(
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(Color.white.opacity(0.10))
+                            )
+                        Text(title.uppercased())
+                            .font(.notchMono(10))
+                            .foregroundStyle(Color.white.opacity(0.6))
+                            .kerning(1.2)
+                        if !sub.isEmpty {
+                            Text(sub)
+                                .font(.notchMono(10))
+                                .foregroundStyle(Color.white.opacity(0.38))
+                                .monospacedDigit()
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                            .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if !folded.wrappedValue {
+                    content()
+                        .padding(.top, 8)
+                }
+            }
+        }
+    }
+
     /// Tarjeta unificada de mediciones: CPU, memoria y batería en tres
     /// carriles con divisores, cada uno con su anillo. El pico y la
     /// presión viven en su carril.
     private var measurementsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 4) {
-                Circle().fill(Color(hex: "2F9E6E")).frame(width: 6, height: 6)
-                Text(tr("mac.measurements")).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
-                Spacer()
-                Text(chip).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.35))
-            }
+            NotchTag(icon: "gauge.with.needle", text: tr("mac.measurements"),
+                     color: Color(hex: "2F9E6E"), trailing: chip)
             HStack(alignment: .center, spacing: 0) {
                 // Carril CPU.
                 VStack(spacing: 6) {
@@ -507,18 +553,23 @@ struct StatsView: View {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [Color.white.opacity(0.07), Color.white.opacity(0.03)],
+                        colors: [Color.white.opacity(0.058), Color.white.opacity(0.028)],
                         startPoint: .top, endPoint: .bottom
                     )
                 )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.09), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(0.13), Color.white.opacity(0.055)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
         )
+        .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
     }
 
     private var laneDivider: some View {
@@ -529,28 +580,6 @@ struct StatsView: View {
         if snap.memFreeFrac > 0.25 { return Color(hex: "2F9E6E") }
         if snap.memFreeFrac > 0.12 { return Color(hex: "D9A514") }
         return Color(hex: "E0574B")
-    }
-
-    /// Cabecera de sección plegable (persiste en Ajustes internos).
-    private func sectionHeader(title: String, sub: String = "", folded: Binding<Bool>) -> some View {
-        Button {
-            folded.wrappedValue.toggle()
-        } label: {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
-                if !sub.isEmpty {
-                    Text(sub).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.35))
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.4))
-                    .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     private func batteryColor(_ level: Int) -> Color {
@@ -1036,12 +1065,23 @@ struct JunkSectionView: View {
             Button {
                 folded.wrappedValue.toggle()
             } label: {
-                HStack(spacing: 6) {
-                    Text(tr("mac.junk")).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.5)).kerning(1)
+                HStack(spacing: 7) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.7))
+                        .frame(width: 18, height: 18)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(Color.white.opacity(0.10))
+                        )
+                    Text(tr("mac.junk").uppercased())
+                        .font(.notchMono(10))
+                        .foregroundStyle(Color.white.opacity(0.6))
+                        .kerning(1.2)
                     if junk.scanning {
                         Text(tr("mac.measuring")).font(.notchMono(10)).foregroundStyle(.secondary)
                     } else if !junk.rows.isEmpty {
-                        Text(JunkStore.formatBytes(junk.allBytes)).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.35)).monospacedDigit()
+                        Text(JunkStore.formatBytes(junk.allBytes)).font(.notchMono(10)).foregroundStyle(Color.white.opacity(0.38)).monospacedDigit()
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -1053,11 +1093,22 @@ struct JunkSectionView: View {
             }
             .buttonStyle(.plain)
             if !folded.wrappedValue {
-                junkBody
+                junkBody.padding(.top, 6)
             }
         }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(LinearGradient(colors: [Color.white.opacity(0.058), Color.white.opacity(0.028)],
+                                     startPoint: .top, endPoint: .bottom))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.13), Color.white.opacity(0.055)],
+                                             startPoint: .top, endPoint: .bottom), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
     }
 
     @ViewBuilder

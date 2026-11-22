@@ -231,6 +231,7 @@ struct TasksView: View {
     @State private var showArchived = false
     @State private var monthOffset = 0
     @State private var selectedDay: Date? = nil
+    @State private var hoveredDay: Date? = nil
 
     enum QuickDue {
         case none, today, tomorrow
@@ -269,8 +270,9 @@ struct TasksView: View {
             // Cabecera: título + abiertas + hoy + añadir rápido.
             HStack(spacing: 8) {
                 Text(tr("task.title"))
-                    .font(.notchMono(11))
-                    .foregroundStyle(.secondary)
+                    .font(.notchMono(13))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .kerning(1)
                 if tasks.openCount > 0 {
                     Text(tr("task.open", tasks.openCount))
                         .font(.notchMono(10)).foregroundStyle(settings.accent)
@@ -460,13 +462,21 @@ struct TasksView: View {
         return Set(CalService.shared.eventDays(from: start, to: end).map { cal.startOfDay(for: $0) })
     }
 
-    /// Letras de día (L M X…) rotadas al primer día local.
-    private func weekdayLetters() -> [String] {
+    /// Letras de día (L M X…) rotadas al primer día local, marcando el
+    /// fin de semana para atenuarlo en la cabecera.
+    private func weekdayLetters() -> [(letter: String, weekend: Bool)] {
         let cal = Calendar.current
-        var syms = cal.veryShortWeekdaySymbols // Dom Lun… (domingo primero)
+        var syms = cal.veryShortWeekdaySymbols
+        let full = cal.weekdaySymbols // Dom Lun… (índice 0 = domingo)
         let shift = (cal.firstWeekday - 1 + 7) % 7
         syms = Array(syms[shift...] + syms[..<shift])
-        return syms
+        let fulls = Array(full[shift...] + full[..<shift])
+        var out: [(letter: String, weekend: Bool)] = []
+        for i in syms.indices {
+            let f = fulls[i]
+            out.append((letter: syms[i], weekend: f == "Saturday" || f == "Sunday"))
+        }
+        return out
     }
 
     private var monthCalendar: some View {
@@ -476,93 +486,158 @@ struct TasksView: View {
         let range = cal.range(of: .day, in: .month, for: first) ?? 1..<30
         let lead = (cal.component(.weekday, from: first) - cal.firstWeekday + 7) % 7
         let days = dueDays()
+        // Una sola consulta para toda la rejilla (antes: por celda).
+        let sys = systemEventDays()
         let today = cal.startOfDay(for: Date())
         let monthName: String = {
-            let f = DateFormatter(); f.locale = .current; f.dateFormat = "LLLL yyyy"
+            let f = DateFormatter(); f.locale = .current; f.dateFormat = "LLLL"
             return f.string(from: first).capitalized
         }()
-        return VStack(spacing: 6) {
-            HStack(spacing: 4) {
+        let year = String(cal.component(.year, from: first))
+        return VStack(spacing: 8) {
+            // Cabecera: mes grande + año atenuado, « › compactos y Hoy.
+            HStack(spacing: 5) {
                 Button { monthOffset -= 12 } label: {
-                    Image(systemName: "chevron.left.2").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
+                    Image(systemName: "chevron.left.2").font(.system(size: 9, weight: .bold)).frame(width: 21, height: 21)
                 }
                 .buttonStyle(NotchGhostButton(size: .mini))
                 .help(String(Calendar.current.component(.year, from: monthBase) - 1))
                 Button { monthOffset -= 1 } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
+                    Image(systemName: "chevron.left").font(.system(size: 10, weight: .bold)).frame(width: 21, height: 21)
                 }
                 .buttonStyle(NotchGhostButton(size: .mini))
-                Text(monthName)
-                    .font(.notchMono(11))
-                    .foregroundStyle(.white.opacity(0.85))
+                HStack(spacing: 5) {
+                    Text(monthName)
+                        .font(.notchMono(13))
+                        .foregroundStyle(.white.opacity(0.92))
+                    Text(year)
+                        .font(.notchMono(11))
+                        .foregroundStyle(Color.white.opacity(0.4))
+                        .monospacedDigit()
+                }
+                .padding(.leading, 5)
                 Spacer()
                 Button { monthOffset = 0; selectedDay = nil } label: {
                     Text(tr("act.today"))
                         .font(.notchMono(10))
                         .foregroundStyle(settings.accent)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(Capsule().fill(settings.accent.opacity(0.14)))
+                        .overlay(Capsule().stroke(settings.accent.opacity(0.35), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 Button { monthOffset += 1 } label: {
-                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
+                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).frame(width: 21, height: 21)
                 }
                 .buttonStyle(NotchGhostButton(size: .mini))
                 Button { monthOffset += 12 } label: {
-                    Image(systemName: "chevron.right.2").font(.system(size: 10, weight: .bold)).frame(width: 24, height: 24)
+                    Image(systemName: "chevron.right.2").font(.system(size: 9, weight: .bold)).frame(width: 21, height: 21)
                 }
                 .buttonStyle(NotchGhostButton(size: .mini))
                 .help(String(Calendar.current.component(.year, from: monthBase) + 1))
             }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 2) {
-                ForEach(weekdayLetters(), id: \.self) { wd in
-                    Text(wd)
-                        .font(.notchMono(8))
-                        .foregroundStyle(Color.white.opacity(0.35))
+            // Franja de días de la semana.
+            HStack(spacing: 0) {
+                ForEach(Array(weekdayLetters().enumerated()), id: \.offset) { _, wd in
+                    Text(wd.letter)
+                        .font(.notchMono(9))
+                        .foregroundStyle(Color.white.opacity(wd.weekend ? 0.32 : 0.45))
                         .frame(maxWidth: .infinity)
                 }
-                ForEach(0..<lead, id: \.self) { _ in Color.clear.frame(height: 26) }
+            }
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.035))
+            )
+            // Rejilla. OJO: las celdas vacías y los días son ForEach
+            // hermanos: sus IDs no pueden solaparse (0..<lead chocaba
+            // con 1..<31 y se comía los primeros días del mes).
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 3) {
+                ForEach((0..<lead).map { -$0 - 1 }, id: \.self) { _ in
+                    Color.clear.frame(height: 30)
+                }
                 ForEach(range.lowerBound..<range.upperBound, id: \.self) { d in
                     let date = cal.date(byAdding: .day, value: d - 1, to: first) ?? first
                     let sod = cal.startOfDay(for: date)
                     let isSel = selectedDay.map { cal.isDate($0, inSameDayAs: date) } ?? false
                     let isToday = cal.isDate(sod, inSameDayAs: today)
                     let isWeekend = cal.isDateInWeekend(date)
+                    let hot = hoveredDay.map { cal.isDate($0, inSameDayAs: date) } ?? false
                     Button {
                         selectedDay = isSel ? nil : date
                     } label: {
-                        VStack(spacing: 1) {
-                            Text("\(d)")
-                                .font(.notchMono(10))
-                                .foregroundStyle(isSel ? .white : isToday ? settings.accent : Color.white.opacity(isWeekend ? 0.4 : 0.75))
-                                .monospacedDigit()
-                            HStack(spacing: 2) {
+                        VStack(spacing: 2) {
+                            ZStack {
+                                if isToday && !isSel {
+                                    Circle().fill(settings.accent.opacity(0.9))
+                                } else if isSel {
+                                    Circle().fill(settings.accent.opacity(0.24))
+                                        .overlay(Circle().stroke(settings.accent.opacity(0.85), lineWidth: 1))
+                                } else if hot {
+                                    Circle().fill(Color.white.opacity(0.08))
+                                }
+                                Text("\(d)")
+                                    .font(.notchMono(11))
+                                    .foregroundStyle(
+                                        isSel ? .white
+                                            : isToday ? (Color.black.opacity(0.85))
+                                            : Color.white.opacity(isWeekend ? 0.42 : 0.8)
+                                    )
+                                    .monospacedDigit()
+                            }
+                            .frame(width: 26, height: 26)
+                            HStack(spacing: 3) {
                                 Circle()
                                     .fill(days.contains(sod) ? settings.accent : Color.clear)
                                     .frame(width: 4, height: 4)
                                 Circle()
-                                    .fill(systemEventDays().contains(sod) ? Color(hex: "3E8BD8") : Color.clear)
+                                    .fill(sys.contains(sod) ? Color(hex: "3E8BD8") : Color.clear)
                                     .frame(width: 4, height: 4)
                             }
+                            .frame(height: 5)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 26)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(isSel ? settings.accent.opacity(0.25) : isToday ? settings.accent.opacity(0.12) : Color.clear)
-                        )
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .onHover { hot in
+                        withAnimation(.easeOut(duration: 0.12)) {
+                            hoveredDay = hot ? date : (hoveredDay == date ? nil : hoveredDay)
+                        }
+                    }
                 }
             }
+            // Leyenda: qué significa cada punto.
+            HStack(spacing: 12) {
+                HStack(spacing: 4) {
+                    Circle().fill(settings.accent).frame(width: 5, height: 5)
+                    Text(tr("task.title")).font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.4))
+                }
+                HStack(spacing: 4) {
+                    Circle().fill(Color(hex: "3E8BD8")).frame(width: 5, height: 5)
+                    Text(tr("task.lgCal")).font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.4))
+                }
+                Spacer()
+            }
         }
-        .padding(10)
+        .padding(11)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.04))
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(
+                    LinearGradient(colors: [Color.white.opacity(0.058), Color.white.opacity(0.028)],
+                                   startPoint: .top, endPoint: .bottom)
+                )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(0.13), Color.white.opacity(0.055)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
         )
+        .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
     }
 
     private func dayTitle(_ d: Date) -> String {
@@ -584,15 +659,22 @@ struct TasksView: View {
     @ViewBuilder
     private var taskSections: some View {
         if shown.isEmpty {
-            VStack(spacing: 6) {
-                Image(systemName: "checklist")
-                    .font(.system(size: 16))
-                    .foregroundStyle(Color.white.opacity(0.25))
+            VStack(spacing: 7) {
+                ZStack {
+                    Circle().fill(Color.white.opacity(0.06)).frame(width: 40, height: 40)
+                    Image(systemName: "checklist")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                }
                 Text(selectedDay == nil ? tr("task.empty") : tr("act.empty"))
                     .font(.caption).foregroundStyle(.secondary)
+                if selectedDay != nil {
+                    Button(tr("task.clearDay")) { selectedDay = nil }
+                        .buttonStyle(NotchGhostButton(size: .mini, tint: settings.accent))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 14)
+            .padding(.vertical, 16)
         } else {
             let todos = inStatus(.todo), doings = inStatus(.doing)
             let dones = inStatus(.done), archived = inStatus(.archived)

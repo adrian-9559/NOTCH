@@ -48,6 +48,8 @@ final class NotchPanel: NSPanel {
 final class NotchWindowController {
     private let panel: NotchPanel
     private var visible = false
+    /// Testigo de la animación de cierre en curso (ver `hide()`).
+    private var hideToken = 0
 
     init<Content: View>(content: Content) {
         panel = NotchPanel(content: content)
@@ -76,13 +78,20 @@ final class NotchWindowController {
 
     func hide() {
         let up = panel.frame.origin.applying(CGAffineTransform(translationX: 0, y: 10))
+        // Marca la orden de ocultar: si mientras corre la animación se
+        // vuelve a mostrar (clic + hover), el cierre viejo NO debe
+        // ordenar fuera el panel recién abierto (lo dejaría "visible"
+        // pero invisible y el hover ya no lo reabría).
+        hideToken += 1
+        let token = hideToken
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().setFrameOrigin(up)
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            self?.panel.orderOut(nil)
+            guard let self, self.hideToken == token, !self.visible else { return }
+            self.panel.orderOut(nil)
         })
         visible = false
     }

@@ -78,6 +78,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
 struct SettingsModalView: View {
     @ObservedObject var settings = NotchSettings.shared
     @State private var page: SettingsPage = .appearance
+    @State private var hoveredPage: SettingsPage? = nil
+    @State private var hoverClose = false
     @State private var hoverOpen = UserDefaults.standard.object(forKey: "notchHoverOpen") as? Bool ?? true
     @State private var autoSend = ReplyService.shared.autoSendEnabled
     @State private var trustState = ReplyService.shared.isTrusted
@@ -107,16 +109,21 @@ struct SettingsModalView: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(settings.accent.opacity(0.22))
+                        .fill(
+                            LinearGradient(colors: [settings.accent, settings.accent.opacity(0.65)],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
                         .frame(width: 32, height: 32)
+                        .shadow(color: settings.accent.opacity(0.45), radius: 9, y: 3)
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 15))
-                        .foregroundStyle(settings.accent)
+                        .foregroundStyle(.white)
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     Text("NOTCH")
                         .font(.notchMono(13))
                         .foregroundStyle(.white)
+                        .kerning(1.5)
                     Text(tr("set.subtitle"))
                         .font(.notchMono(8))
                         .foregroundStyle(Color.white.opacity(0.4))
@@ -127,21 +134,23 @@ struct SettingsModalView: View {
             .padding(.bottom, 12)
 
             ForEach(SettingsPage.allCases) { p in
+                let sel = page == p
                 Button {
                     page = p
                 } label: {
                     HStack(spacing: 9) {
                         Image(systemName: p.icon)
                             .font(.system(size: 12))
-                            .frame(width: 22, height: 22)
+                            .frame(width: 24, height: 24)
                             .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(page == p ? settings.accent.opacity(0.25) : Color.white.opacity(0.07))
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(sel ? settings.accent.opacity(0.28)
+                                           : (hoveredPage == p ? Color.white.opacity(0.09) : Color.white.opacity(0.06)))
                             )
-                            .foregroundStyle(page == p ? settings.accent : Color.white.opacity(0.6))
+                            .foregroundStyle(sel ? .white : Color.white.opacity(0.6))
                         Text(tr(p.titleKey).capitalized)
-                            .font(.system(size: 12, weight: page == p ? .semibold : .regular))
-                            .foregroundStyle(page == p ? .white : Color.white.opacity(0.7))
+                            .font(.system(size: 12, weight: sel ? .semibold : .regular))
+                            .foregroundStyle(sel ? .white : Color.white.opacity(0.7))
                         Spacer()
                         if p == .tabs {
                             Text("\(settings.visibleOrder.count)")
@@ -154,16 +163,31 @@ struct SettingsModalView: View {
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(page == p ? Color.white.opacity(0.09) : Color.clear)
+                            .fill(sel ? Color.white.opacity(0.10)
+                                   : (hoveredPage == p ? Color.white.opacity(0.05) : Color.clear))
                     )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(sel ? settings.accent.opacity(0.40) : Color.clear, lineWidth: 1)
+                    )
+                    .overlay(alignment: .leading) {
+                        // Indicador de selección pegado al filo izquierdo.
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(sel ? settings.accent : Color.clear)
+                            .frame(width: 3, height: 20)
+                            .padding(.leading, -6)
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .onHover { h in if h { hoveredPage = p } else if hoveredPage == p { hoveredPage = nil } }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 1)
             }
             Spacer()
             HStack(spacing: 6) {
                 Circle().fill(Color.green).frame(width: 7, height: 7)
+                    .shadow(color: Color.green.opacity(0.6), radius: 4)
                 Text(tr("set.local"))
                     .font(.notchMono(8))
                     .foregroundStyle(Color.white.opacity(0.4))
@@ -172,6 +196,7 @@ struct SettingsModalView: View {
             .padding(.bottom, 14)
         }
         .frame(width: 212)
+        .background(Color.white.opacity(0.028))
     }
 
     // MARK: - Contenido
@@ -179,10 +204,15 @@ struct SettingsModalView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(tr(page.titleKey))
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 7) {
+                        Text(tr(page.titleKey))
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(.white)
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(settings.accent)
+                            .frame(width: 18, height: 3)
+                    }
                     Text(pageSubtitle)
                         .font(.system(size: 11))
                         .foregroundStyle(Color.white.opacity(0.45))
@@ -191,11 +221,16 @@ struct SettingsModalView: View {
                 Button {
                     SettingsWindowController.shared.hide()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Color.white.opacity(0.45))
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(hoverClose ? 0.9 : 0.55))
+                        .frame(width: 26, height: 26)
+                        .background(
+                            Circle().fill(hoverClose ? Color.white.opacity(0.10) : Color.white.opacity(0.05))
+                        )
                 }
                 .buttonStyle(.plain)
+                .onHover { hoverClose = $0 }
             }
             .padding(.horizontal, 20)
             .padding(.top, 18)
@@ -704,7 +739,8 @@ struct SettingsModalView: View {
 
 // MARK: - Piezas del rediseño
 
-/// Tarjeta de sección con rótulo mono y borde sutil.
+/// Tarjeta de sección con rótulo mono y borde sutil (mismo material
+/// que las tarjetas del panel: degradado, filo en degradado, sombra).
 private struct SettingsCard<Content: View>: View {
     var label: String
     var icon: String
@@ -712,26 +748,50 @@ private struct SettingsCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 7) {
                 Image(systemName: icon)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(accent)
+                    .frame(width: 18, height: 18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(accent.opacity(0.16))
+                    )
                 Text(label.uppercased())
                     .font(.notchMono(10))
-                    .foregroundStyle(Color.white.opacity(0.5))
+                    .foregroundStyle(Color.white.opacity(0.6))
                     .kerning(1.2)
+                Spacer()
             }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.045)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 1))
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.058), Color.white.opacity(0.028)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.13), Color.white.opacity(0.055)],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
     }
 }
 
-/// Fila con icono + toggle.
+/// Fila con icono + toggle (con hover sutil).
 private struct IconToggleRow: View {
     var icon: String
     var label: String
@@ -739,6 +799,7 @@ private struct IconToggleRow: View {
     @Binding var isOn: Bool
     var accent: Color
     var onChange: () -> Void
+    @State private var hover = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -762,7 +823,12 @@ private struct IconToggleRow: View {
                 .labelsHidden()
                 .onChange(of: isOn) { _ in onChange() }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(hover ? Color.white.opacity(0.045) : Color.clear)
+        )
+        .onHover { hover = $0 }
     }
 }
 

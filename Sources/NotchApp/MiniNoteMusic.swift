@@ -97,15 +97,20 @@ struct QuickNoteView: View {
     @State private var vaultPath: String = UserDefaults.standard.string(forKey: "notchObsidianVault") ?? ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(settings.accent)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(settings.accent.opacity(0.16))
+                        .frame(width: 22, height: 22)
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(settings.accent)
+                }
                 Text(tr("note.hint"))
-                    .font(.notchMono(10))
-                    .foregroundStyle(.secondary)
-                    .kerning(1.2)
+                    .font(.notchMono(11))
+                    .foregroundStyle(Color.white.opacity(0.7))
+                    .kerning(0.6)
                 Spacer()
                 if !store.lastSaved.isEmpty {
                     HStack(spacing: 3) {
@@ -133,39 +138,16 @@ struct QuickNoteView: View {
                     .buttonStyle(NotchGhostButton(size: .small))
                 Spacer()
             }
-            // Últimas capturas: lo guardado, sin abrir nada.
+            // Últimas capturas: tarjetas con hora, la más reciente con
+            // filo del acento.
             let recent = store.recentNotes()
             if !recent.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
+                NotchTag(icon: "clock.arrow.circlepath", text: tr("note.recent"))
+                VStack(spacing: 4) {
                     ForEach(recent.indices, id: \.self) { i in
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(i == 0 ? settings.accent : Color.white.opacity(0.25))
-                                .frame(width: 6, height: 6)
-                            Text(recent[i].text)
-                                .font(.caption)
-                                .foregroundStyle(Color.white.opacity(i == 0 ? 0.9 : 0.6))
-                                .lineLimit(2)
-                            Spacer()
-                            Text(shortWhen(recent[i].date))
-                                .font(.notchMono(9))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 5)
-                        if i < recent.count - 1 {
-                            Divider().background(Color.white.opacity(0.07))
-                        }
+                        noteRow(recent[i], first: i == 0)
                     }
                 }
-                .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.03))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.white.opacity(0.07), lineWidth: 1)
-                )
             }
             // Destino Obsidian en una fila con icono.
             NotchTextField(
@@ -177,6 +159,35 @@ struct QuickNoteView: View {
             )
         }
         .padding(8)
+    }
+
+    private func noteRow(_ n: (date: Date, text: String), first: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(first ? settings.accent : Color.white.opacity(0.22))
+                .frame(width: 5, height: 5)
+                .padding(.top, 5)
+            Text(n.text)
+                .font(.caption)
+                .foregroundStyle(Color.white.opacity(first ? 0.9 : 0.6))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
+            Text(shortWhen(n.date))
+                .font(.notchMono(9))
+                .foregroundStyle(.secondary)
+                .padding(.top, 1)
+        }
+        .padding(.horizontal, 9).padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(first ? 0.05 : 0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(first ? settings.accent.opacity(0.30) : Color.white.opacity(0.06), lineWidth: 1)
+        )
     }
 
     private func save() {

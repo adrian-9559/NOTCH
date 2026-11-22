@@ -117,53 +117,56 @@ struct ClipboardView: View {
                     .disabled(store.clips.isEmpty)
             }
             if store.clips.isEmpty {
-                Text(tr("clip.empty"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 8)
+                VStack(spacing: 6) {
+                    ZStack {
+                        Circle().fill(Color.white.opacity(0.06)).frame(width: 34, height: 34)
+                        Image(systemName: "clipboard")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.white.opacity(0.35))
+                    }
+                    Text(tr("clip.empty"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 8)
             } else {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(store.clips.prefix(12)) { clip in
                         Button {
                             store.copy(clip, paste: settings.clipAutoPaste)
                         } label: {
+                            let copied = store.justCopied == clip.id
                             HStack(spacing: 8) {
-                                if store.justCopied == clip.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(.green)
-                                } else {
-                                    Image(systemName: "doc.on.doc")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color.white.opacity(0.35))
-                                }
+                                Image(systemName: copied ? "checkmark.circle.fill" : "doc.on.doc")
+                                    .font(.system(size: copied ? 11 : 10))
+                                    .foregroundStyle(copied ? .green : Color.white.opacity(0.35))
                                 Text(clip.text)
                                     .font(.caption)
                                     .foregroundStyle(Color.white.opacity(0.85))
                                     .lineLimit(2)
-                                Spacer()
+                                    .multilineTextAlignment(.leading)
+                                Spacer(minLength: 6)
                                 Text(shortWhen(clip.date))
                                     .font(.notchMono(9))
                                     .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.white.opacity(0.07)))
                             }
-                            .padding(.vertical, 6)
+                            .padding(.horizontal, 9).padding(.vertical, 7)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(copied ? Color(hex: "2F9E6E").opacity(0.12) : Color.white.opacity(0.035))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(copied ? Color(hex: "2F9E6E").opacity(0.45) : Color.white.opacity(0.06), lineWidth: 1)
+                            )
                         }
                         .buttonStyle(.plain)
-                        if clip.id != store.clips.prefix(12).last?.id {
-                            Divider().background(Color.white.opacity(0.07))
-                        }
                     }
                 }
-                .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.03))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.white.opacity(0.07), lineWidth: 1)
-                )
             }
             Text(tr("clip.hint"))
                 .font(.caption2)
