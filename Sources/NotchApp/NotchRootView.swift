@@ -310,6 +310,7 @@ struct NotchRootView: View {
                 .frame(height: 1)
         }
         .animation(.easeInOut(duration: 1.1), value: music.tint)
+        .liquidGlass(settings.liquidGlass, radius: 18, topFlat: true)
         .shadow(radius: 24)
     }
 }

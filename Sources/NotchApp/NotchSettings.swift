@@ -93,6 +93,11 @@ final class NotchSettings: ObservableObject {
     @Published var tempUnit: String {
         didSet { save() }
     }
+    /// Modo «Liquid Glass» al estilo de Apple: brillos especulares y
+    /// filos de cristal en el panel y en los ajustes.
+    @Published var liquidGlass: Bool {
+        didSet { save() }
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -133,6 +138,7 @@ final class NotchSettings: ObservableObject {
         clipMax = d.object(forKey: "notchClipMax") as? Double ?? 30
         let tu = d.string(forKey: "notchTempUnit") ?? "C"
         tempUnit = ["C", "F"].contains(tu) ? tu : "C"
+        liquidGlass = d.object(forKey: "notchLiquidGlass") as? Bool ?? false
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
     }
@@ -184,6 +190,7 @@ final class NotchSettings: ObservableObject {
         d.set(useLocation, forKey: "notchUseLocation")
         d.set(clipMax, forKey: "notchClipMax")
         d.set(tempUnit, forKey: "notchTempUnit")
+        d.set(liquidGlass, forKey: "notchLiquidGlass")
     }
 }
 

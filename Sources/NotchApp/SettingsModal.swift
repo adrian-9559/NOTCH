@@ -357,6 +357,14 @@ struct SettingsModalView: View {
                         .overlay(Text("abc").font(.notchMono(8)).foregroundStyle(.white.opacity(0.8)))
                 }
             }
+            // Modo Liquid Glass de Apple (emulado): brillos de cristal
+            // en el panel y en todas las tarjetas.
+            SettingsCard(label: tr("set.liquid"), icon: "drop.fill", accent: settings.accent) {
+                IconToggleRow(icon: "drop.halffull",
+                              label: tr("set.liquid").capitalized,
+                              subtitle: tr("set.liquidSub"),
+                              isOn: $settings.liquidGlass, accent: settings.accent) {}
+            }
             tabsPage
         }
     }
@@ -1063,6 +1071,7 @@ private struct SettingsCard<Content: View>: View {
                     lineWidth: 1
                 )
         )
+        .liquidGlass(NotchSettings.shared.liquidGlass, radius: 14)
         .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
     }
 }

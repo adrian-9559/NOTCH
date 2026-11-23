@@ -300,7 +300,79 @@ struct NotchCard<Content: View>: View {
                         lineWidth: 1
                     )
             )
+            .liquidGlass(NotchSettings.shared.liquidGlass, radius: 13)
             .shadow(color: .black.opacity(0.20), radius: 10, y: 5)
+    }
+}
+
+// MARK: - Liquid Glass
+
+/// Capas de brillo «Liquid Glass» al estilo de Apple. Las APIs
+/// reales (.glassEffect) son de macOS26: aquí se emulan con luz de
+/// estudio diagonal, un menisco de luz en el filo superior y un
+/// borde de cristal más luminoso. Se aplica desde Apariencia.
+private struct GlassLayers<S: Shape>: View {
+    var shape: S
+
+    var body: some View {
+        // Luz de estudio: brillo diagonal sobre el vidrio.
+        shape.fill(
+            LinearGradient(
+                colors: [Color.white.opacity(0.13), .clear, Color.white.opacity(0.05)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+        )
+        // Menisco: filo superior de luz, como el cristal de Apple.
+        shape.fill(
+            LinearGradient(
+                stops: [
+                    .init(color: .white.opacity(0.24), location: 0),
+                    .init(color: .white.opacity(0.06), location: 0.07),
+                    .init(color: .clear, location: 0.22),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+        )
+        // Filo de cristal: borde superior más marcado.
+        shape.stroke(
+            LinearGradient(
+                colors: [Color.white.opacity(0.38), Color.white.opacity(0.10)],
+                startPoint: .top, endPoint: .bottom
+            ),
+            lineWidth: 1
+        )
+        .allowsHitTesting(false)
+    }
+}
+
+/// Modificador que añade las capas de cristal si el modo está activo.
+struct LiquidGlassStyle: ViewModifier {
+    var on: Bool
+    var radius: CGFloat = 13
+    /// El panel cuelga del notch: esquinas superiores rectas.
+    var topFlat = false
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if on {
+                if topFlat {
+                    GlassLayers(shape: UnevenRoundedRectangle(
+                        cornerRadii: .init(topLeading: 0, bottomLeading: radius,
+                                           bottomTrailing: radius, topTrailing: 0),
+                        style: .continuous
+                    ))
+                } else {
+                    GlassLayers(shape: RoundedRectangle(cornerRadius: radius, style: .continuous))
+                }
+            }
+        }
+    }
+}
+
+extension View {
+    /// Activa el brillo Liquid Glass (Apariencia → Liquid Glass).
+    func liquidGlass(_ on: Bool, radius: CGFloat = 13, topFlat: Bool = false) -> some View {
+        modifier(LiquidGlassStyle(on: on, radius: radius, topFlat: topFlat))
     }
 }
 
