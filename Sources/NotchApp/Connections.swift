@@ -685,7 +685,7 @@ struct WeatherView: View {
                                 .padding(.bottom, 2)
                         }
                         if let t = store.temp {
-                            Text("\(Int(t.rounded()))°")
+                            Text(fmtTemp(t))
                                 .font(.notchMono(34))
                                 .foregroundStyle(.white)
                                 .monospacedDigit()
@@ -699,7 +699,7 @@ struct WeatherView: View {
                     metricTile(icon: "drop.fill", label: tr("wthr.humidity"),
                                value: store.humidity.map { "\(Int($0.rounded()))" } ?? "—", unit: "%")
                     metricTile(icon: "arrow.up", label: tr("wthr.max"),
-                               value: store.days.first.map { "\(Int($0.tmax.rounded()))" } ?? "—", unit: "°")
+                               value: store.days.first.map { fmtTemp($0.tmax, degree: false) } ?? "—", unit: "°")
                 }
             }
         }
@@ -752,7 +752,7 @@ struct WeatherView: View {
                                 .font(.notchMono(9))
                                 .foregroundStyle(i == 0 ? settings.accent : Color.white.opacity(0.5))
                             WeatherGlyph(code: h.code, size: 17)
-                            Text("\(Int(h.temp.rounded()))°")
+                            Text(fmtTemp(h.temp))
                                 .font(.notchMono(12))
                                 .foregroundStyle(.white.opacity(0.92))
                                 .monospacedDigit()
@@ -805,7 +805,7 @@ struct WeatherView: View {
                         .frame(width: 84, alignment: .leading)
                     WeatherGlyph(code: d.code, size: 15)
                         .frame(width: 18)
-                    Text("\(Int(d.tmin.rounded()))°")
+                    Text(fmtTemp(d.tmin))
                         .font(.notchMono(11))
                         .foregroundStyle(Color.white.opacity(0.45))
                         .monospacedDigit()
@@ -826,7 +826,7 @@ struct WeatherView: View {
                         }
                     }
                     .frame(height: 6)
-                    Text("\(Int(d.tmax.rounded()))°")
+                    Text(fmtTemp(d.tmax))
                         .font(.notchMono(11))
                         .foregroundStyle(.white)
                         .monospacedDigit()

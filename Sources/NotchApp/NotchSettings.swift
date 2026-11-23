@@ -88,6 +88,11 @@ final class NotchSettings: ObservableObject {
     @Published var clipMax: Double {
         didSet { save() }
     }
+    /// Unidad térmica del clima: "C" o "F" (afecta a todas las
+    /// pantallas: héroe, fichas, horas, días y el notch cerrado).
+    @Published var tempUnit: String {
+        didSet { save() }
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -126,6 +131,8 @@ final class NotchSettings: ObservableObject {
         // Automático por defecto: la primera vez se pide consentimiento.
         useLocation = d.object(forKey: "notchUseLocation") as? Bool ?? true
         clipMax = d.object(forKey: "notchClipMax") as? Double ?? 30
+        let tu = d.string(forKey: "notchTempUnit") ?? "C"
+        tempUnit = ["C", "F"].contains(tu) ? tu : "C"
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
     }
@@ -176,6 +183,15 @@ final class NotchSettings: ObservableObject {
         d.set(useSystemCalendar, forKey: "notchUseSystemCalendar")
         d.set(useLocation, forKey: "notchUseLocation")
         d.set(clipMax, forKey: "notchClipMax")
+        d.set(tempUnit, forKey: "notchTempUnit")
     }
+}
+
+/// Convierte una temperatura en Celsius a la unidad elegida (ºC/ºF) y
+/// la formatea como «23°». Todas las pantallas de clima pasan por
+/// aquí, así el selector de Ajustes cambia todo de una vez.
+func fmtTemp(_ celsius: Double, degree: Bool = true) -> String {
+    let v = NotchSettings.shared.tempUnit == "F" ? celsius * 9 / 5 + 32 : celsius
+    return "\(Int(v.rounded()))\(degree ? "°" : "")"
 }
 #endif

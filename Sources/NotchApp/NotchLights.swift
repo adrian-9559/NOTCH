@@ -135,11 +135,13 @@ final class NotchLightsController {
         weatherPanels = []
         for entry in notches where entry.layout.hasNotch {
             let n = entry.layout.notchRect
-            // Tira de clima dentro del notch (detrás de la píldora).
-            weatherPanels.append(makeStripPanel(frame: n))
-            // Centrada en el notch, pegada arriba: como si saliera de él.
+            // Misma forma y sitio para píldora y tira: la tira de
+            // clima ocupa el rectángulo EXACTO de la píldora (300×40
+            // pegada arriba), así el icono queda donde la carátula y
+            // la temperatura donde la reproducción.
             let w: CGFloat = 300, h: CGFloat = 40
             let frame = NSRect(x: n.midX - w / 2, y: n.maxY - h, width: w, height: h)
+            weatherPanels.append(makeStripPanel(frame: frame))
             fputs("NOTCH-LIGHTS notch=\(n) pill=\(frame)\n", stderr)
             panels.append(makePanel(frame: frame, onTap: onTap))
         }
@@ -227,8 +229,10 @@ final class NotchLightsController {
     /// Para que el hover las incluya: la píldora (300 px) es más ancha
     /// que el notch y los bordes quedarían fuera de la zona.
     var visiblePillFrames: [NSRect] {
-        guard hasSong, !panelOpen, !toastShowing else { return [] }
-        return panels.map { $0.frame }
+        guard !panelOpen, !toastShowing else { return [] }
+        // Con música, la píldora; sin ella, la tira ocupa el mismo
+        // sitio: pasar el ratón por el clima también abre el panel.
+        return (hasSong ? panels : weatherPanels).map { $0.frame }
     }
 
     private func makePanel(frame: NSRect, onTap: @escaping () -> Void) -> NSPanel {
@@ -272,29 +276,94 @@ final class NotchLightsController {
     }
 }
 
-/// Clima en el notch cerrado: icono a la izquierda, temperatura a la
-/// derecha. Se muestra cuando no hay píldora de música.
+/// Clima en el notch cerrado: réplica de la píldora de música en el
+/// mismo rectángulo — el icono del parte donde va la carátula y la
+/// temperatura donde va el tiempo + progreso. Sin datos: invisible.
 struct NotchWeatherStripView: View {
     @ObservedObject private var w = WeatherStore.shared
+    @ObservedObject private var settings = NotchSettings.shared
 
     var body: some View {
-        HStack {
-            if w.temp != nil, let c = w.code {
-                WeatherGlyph(code: c, size: 16)
+        HStack(spacing: 8) {
+            // Icono del parte en el hueco de la carátula (24×24).
+            Group {
+                if let c = w.code {
+                    WeatherGlyph(code: c, size: 16)
+                } else {
+                    Image(systemName: "cloud")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.7))
+                }
             }
-            Spacer(minLength: 0)
-            if let t = w.temp {
-                Text("\(Int(t.rounded()))°")
-                    .font(.notchMono(14))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .monospacedDigit()
+            .frame(width: 24, height: 24)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            Spacer(minLength: 8)
+            // Temperatura donde va el tiempo + barra de progreso.
+            VStack(alignment: .trailing, spacing: 3) {
+                if let t = w.temp {
+                    Text(fmtTemp(t))
+                        .font(.notchMono(13))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                    // Barra frío→cálido con el marcador de la hora
+                    // actual dentro del rango de hoy (si hay partes).
+                    rangeBar(t)
+                }
             }
+            Spacer(minLength: 8)
+            // Unidad en el hueco del EQ (quieto, sin animación).
+            Text(settings.tempUnit == "F" ? "°F" : "°C")
+                .font(.notchMono(10))
+                .foregroundStyle(Color.white.opacity(0.55))
         }
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 10)
+        .frame(width: 300, height: 40)
+        .background(stripGlass)
         // Sin datos aún: invisible (el fundido del panel ya lo oculta).
         .opacity(w.temp == nil ? 0 : 1)
         .animation(.easeInOut(duration: 0.35), value: w.temp == nil)
+    }
+
+    /// Rango de hoy (mín→máx) como barra de70 px, con marcador.
+    private func rangeBar(_ t: Double) -> some View {
+        let lo = w.days.first?.tmin ?? (t - 4)
+        let hi = w.days.first?.tmax ?? (t + 4)
+        let frac = hi > lo ? CGFloat((t - lo) / (hi - lo)) : 0.5
+        return ZStack(alignment: .leading) {
+            Capsule().fill(Color.white.opacity(0.2)).frame(width: 70, height: 3)
+            Capsule()
+                .fill(LinearGradient(colors: [Color(hex: "4C8FD8"), Color(hex: "F2B33D")],
+                                     startPoint: .leading, endPoint: .trailing))
+                .frame(width: 70, height: 3)
+            Circle()
+                .fill(Color.white)
+                .frame(width: 5, height: 5)
+                .offset(x: max(0, min(65, 70 * frac)))
+        }
+        .frame(width: 70, height: 5, alignment: .leading)
+    }
+
+    /// Mismo material que la píldora: negro puro, pegada arriba,
+    /// abajo redonda, con un filo azul del color del parte.
+    private var stripGlass: some View {
+        let shape = UnevenRoundedRectangle(
+            cornerRadii: .init(topLeading: 0, bottomLeading: 16, bottomTrailing: 16, topTrailing: 0),
+            style: .continuous
+        )
+        let bottomFade = LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black, location: 0.45),
+                .init(color: .black, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        return shape.fill(Color.black)
+            .overlay(
+                shape.stroke(Color(hex: "4C8FD8").opacity(0.6), lineWidth: 1)
+                    .mask(bottomFade)
+            )
     }
 }
 #endif

@@ -395,21 +395,24 @@ struct StatsView: View {
             HStack(alignment: .top, spacing: 10) {
                 // Qué carga el Mac (plegable): tabla ordenable con buscador.
                 foldCard(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total",
-                         icon: "list.bullet.rectangle", folded: $foldLoads) {
-                    // Filtros pegados al borde: CPU/MEM a la izquierda
-                    // y buscador a todo el resto del ancho.
-                    HStack(spacing: 6) {
-                        NotchSegments(
-                            selection: $sortByCpu,
-                            options: [(true, "CPU"), (false, "MEM")],
-                            color: settings.accent
-                        )
-                        NotchTextField(
-                            placeholder: tr("mac.search"), text: $procQuery,
-                            icon: "magnifyingglass",
-                            color: settings.accent, font: .caption
-                        )
-                        .frame(maxWidth: .infinity)
+                         icon: "list.bullet.rectangle", folded: $foldLoads,
+                         compact: !expandPair) {
+                    // Compacto: sin filtros; «ver más» los devuelve
+                    // junto con la cabecera, al expandir lo de dentro.
+                    if expandPair {
+                        HStack(spacing: 6) {
+                            NotchSegments(
+                                selection: $sortByCpu,
+                                options: [(true, "CPU"), (false, "MEM")],
+                                color: settings.accent
+                            )
+                            NotchTextField(
+                                placeholder: tr("mac.search"), text: $procQuery,
+                                icon: "magnifyingglass",
+                                color: settings.accent, font: .caption
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
                     }
                     if sortedProcs.isEmpty {
                         Text(tr("mac.noMatch")).font(.caption).foregroundStyle(.secondary)
@@ -453,7 +456,7 @@ struct StatsView: View {
                 .background(heightReporter("loads"))
                 .frame(height: pairCap)
                 .clipped()
-                .overlay(alignment: .bottom) { pairMore(loadsNat, cap: pairCap) }
+                .overlay(alignment: .bottom) { pairMore(loadsNat, cap: pairCap, force: !expandPair) }
                 // Servidores de agentes (máx. 5 + resto, como Lumio).
                 foldCard(
                     title: tr("mac.servers"),
@@ -503,6 +506,7 @@ struct StatsView: View {
         .onReceive(heavy) { _ in refreshHeavy() }
         // Al plegar cambia la altura natural: se vuelve a medir.
         .onChange(of: foldLoads) { _ in naturalHeights = [:] }
+        .onChange(of: expandPair) { _ in naturalHeights = [:] }
         .onChange(of: foldServers) { _ in naturalHeights = [:] }
         .onPreferenceChange(ColHeightKey.self) { add in
             naturalHeights.merge(add) { old, new in max(old, new) }
@@ -519,8 +523,10 @@ struct StatsView: View {
 
     /// Botón flotante "Ver más" para la columna que desborda.
     @ViewBuilder
-    private func pairMore(_ nat: CGFloat, cap: CGFloat?) -> some View {
-        if let cap, nat > cap + 4 {
+    private func pairMore(_ nat: CGFloat, cap: CGFloat?, force: Bool = false) -> some View {
+        // `force`: loads lo muestra SIEMPRE (para expandir lo de
+        // dentro), aunque su columna no desborde la pareja.
+        if force || (cap.map { nat > $0 + 4 } ?? false) {
             VStack {
                 Spacer(minLength: 0)
                 Button {
@@ -548,49 +554,58 @@ struct StatsView: View {
     /// Tarjeta plegable con cabecera clicable (icono + rótulo + dato).
     private func foldCard<Content: View>(
         title: String, sub: String = "", icon: String,
-        folded: Binding<Bool>,
+        folded: Binding<Bool>, compact: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
         NotchCard {
             // Una sola vista (ver NotchCard): cabecera + contenido.
+            // Modo compacto: SIN cabecera, el contenido empieza arriba
+            // del todo (What loads hasta pulsar «ver más»).
             VStack(alignment: .leading, spacing: 8) {
-                Button {
-                    withAnimation(.snappy(duration: 0.18)) { folded.wrappedValue.toggle() }
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: icon)
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Color.white.opacity(0.7))
-                            .frame(width: 18, height: 18)
-                            .background(
-                                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                    .fill(Color.white.opacity(0.10))
-                            )
-                        Text(title.uppercased())
-                            .font(.notchMono(10))
-                            .foregroundStyle(Color.white.opacity(0.6))
-                            .kerning(1.2)
-                        if !sub.isEmpty {
-                            Text(sub)
-                                .font(.notchMono(10))
-                                .foregroundStyle(Color.white.opacity(0.38))
-                                .monospacedDigit()
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Color.white.opacity(0.4))
-                            .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                if !folded.wrappedValue {
+                if !compact { foldHeader(title: title, sub: sub, icon: icon, folded: folded) }
+                if compact || !folded.wrappedValue {
                     content()
-                        .padding(.top, 8)
+                        .padding(.top, compact ? 0 : 8)
                 }
             }
         }
+    }
+
+    /// Cabecera plegable de foldCard (icono + rótulo + dato + chevron).
+    private func foldHeader(
+        title: String, sub: String, icon: String, folded: Binding<Bool>
+    ) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.18)) { folded.wrappedValue.toggle() }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.7))
+                    .frame(width: 18, height: 18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color.white.opacity(0.10))
+                    )
+                Text(title.uppercased())
+                    .font(.notchMono(10))
+                    .foregroundStyle(Color.white.opacity(0.6))
+                    .kerning(1.2)
+                if !sub.isEmpty {
+                    Text(sub)
+                        .font(.notchMono(10))
+                        .foregroundStyle(Color.white.opacity(0.38))
+                        .monospacedDigit()
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.4))
+                    .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Tarjeta de mediciones: tres mini-tarjetas (CPU, memoria y

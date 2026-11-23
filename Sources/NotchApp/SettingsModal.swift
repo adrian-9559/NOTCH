@@ -579,6 +579,28 @@ struct SettingsModalView: View {
                     ) {
                         settings.useLocation.toggle()
                     }
+                    Divider().background(Color.white.opacity(0.07))
+                    // Unidad térmica: ºC o ºF (cambia todo el clima).
+                    HStack(spacing: 8) {
+                        Image(systemName: "thermometer.medium")
+                            .font(.system(size: 11))
+                            .foregroundStyle(settings.accent)
+                            .frame(width: 24, height: 24)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(settings.accent.opacity(0.14))
+                            )
+                        Text(tr("set.tempUnit"))
+                            .font(.caption)
+                            .foregroundStyle(Color.white.opacity(0.7))
+                        Spacer()
+                        NotchSegments(
+                            selection: $settings.tempUnit,
+                            options: [("C", "°C"), ("F", "°F")],
+                            color: settings.accent
+                        )
+                    }
+                    .padding(.vertical, 4)
                 }
             }
             SettingsCard(label: tr("set.externalCals"), icon: "envelope.fill", accent: settings.accent) {
