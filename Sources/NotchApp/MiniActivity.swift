@@ -149,12 +149,16 @@ struct ActivityView: View {
 
             // Primero la cabecera con la media; el selector, debajo.
             heroCard(total: total)
-            NotchSegments(
-                selection: $range,
-                options: [(0, tr("act.day")), (1, tr("act.week")), (2, tr("act.month"))],
-                color: settings.accent
-            )
-            .frame(maxWidth: 260)
+            // Selector en tarjeta, como el resto de componentes, con los
+            // tres segmentos repartidos a todo el ancho.
+            NotchCard {
+                NotchSegments(
+                    selection: $range,
+                    options: [(0, tr("act.day")), (1, tr("act.week")), (2, tr("act.month"))],
+                    color: settings.accent,
+                    fill: true
+                )
+            }
 
             if rows.isEmpty {
                 emptyState

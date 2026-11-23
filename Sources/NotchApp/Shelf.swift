@@ -453,8 +453,14 @@ private struct ShelfRow: View {
                     Button(tr("shelf.delete")) { shelf.remove(item) }
                     if !live.isEmpty {
                         Menu(tr("shelf.toAgent")) {
-                            ForEach(live, id: \.agent) { s in
-                                Button(s.agent.displayName) { shelf.sendToAgent(item, session: s) }
+                            // Una entrada por agente aunque haya varias
+                            // instancias (TUIs) abiertas.
+                            ForEach(Array(Set(live.map(\.agent))), id: \.self) { agent in
+                                Button(agent.displayName) {
+                                    if let s = live.first(where: { $0.agent == agent }) {
+                                        shelf.sendToAgent(item, session: s)
+                                    }
+                                }
                             }
                         }
                     }

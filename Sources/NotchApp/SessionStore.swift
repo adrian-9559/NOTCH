@@ -41,12 +41,16 @@ public final class SessionStore: ObservableObject {
     }
 
     private func apply(_ fresh: [AgentSession]) {
-        let old = Dictionary(uniqueKeysWithValues: sessions.map { ($0.agent, $0) })
-        var changed = false
-        for s in fresh {
-            if old[s.agent]?.status != s.status { changed = true; break }
+        // Clave agente+pid: puede haber varias instancias del mismo
+        // agente (varias TUIs) y la clave por agente solo chocaría.
+        func key(_ s: AgentSession) -> String { "\(s.agent.rawValue)#\(s.pid ?? -1)" }
+        var old: [String: AgentStatus] = [:]
+        for s in sessions { old[key(s)] = s.status }
+        var changed = fresh.count != sessions.count
+        if !changed {
+            for s in fresh where old[key(s)] != s.status { changed = true; break }
         }
-        if changed || fresh.count != sessions.count {
+        if changed {
             sessions = fresh
             onChange(fresh)
         } else {

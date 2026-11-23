@@ -174,7 +174,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             quietSinceToast[a] = true
             lastAgentStatus.removeValue(forKey: a)
         }
+        // Varias instancias del mismo agente: se agrega a su MEJOR
+        // estado (working > waiting > done > resto) para que la
+        // instancia quieta no tape ni dispare avisos de la activa.
+        func rank(_ s: AgentStatus) -> Int {
+            switch s {
+            case .working: return 4
+            case .waiting: return 3
+            case .done: return 2
+            default: return 1
+            }
+        }
+        var best: [String: AgentSession] = [:]
         for s in fresh {
+            if let b = best[s.agent.rawValue], rank(b.status) >= rank(s.status) { continue }
+            best[s.agent.rawValue] = s
+        }
+        for s in best.values {
             let prev = lastAgentStatus[s.agent]
             lastAgentStatus[s.agent] = s.status
             if s.status == .working || s.status == .waiting {
@@ -203,6 +219,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 self.quietSinceToast[s.agent] = false
                 fputs("NOTCH-EPISODE agent=\(s.agent.rawValue) done-toast\n", stderr)
                 self.requestAgentToast(s)
+                // Aviso externo (Telegram) + WhatsApp (si activados).
+                let msg = tr("toast.done", s.agent.displayName)
+                ExternalNotify.shared.notify(msg, event: .done)
+                if ExternalNotify.shared.waOpenDone {
+                    ExternalNotify.shared.openWhatsApp(msg)
+                }
             }
         }
     }
@@ -216,9 +238,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             DispatchQueue.main.asyncAfter(deadline: .now() + EpisodeJudge.waitPersistence) { [weak self] in
                 guard let self,
                       self.waitGen[s.agent] == gen,
-                      self.lastAgentStatus[s.agent] == .waiting else { return }
+                      // La pregunta sigue viva en CUALQUIER instancia.
+                      self.store.sessions.contains(where: { $0.agent == s.agent && $0.status == .waiting }) else { return }
                 fputs("NOTCH-EPISODE agent=\(s.agent.rawValue) wait-toast\n", stderr)
                 self.requestWaitToast(s)
+                ExternalNotify.shared.notify(
+                    tr("toast.needsYou", s.agent.displayName) + (s.detail.map { "\n\($0)" } ?? ""),
+                    event: .waiting)
             }
         }
     }
@@ -444,6 +470,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let panelOpen = windowController?.isVisible == true
         var notified: [UUID] = []
         for t in due {
+            // Aviso externo del recordatorio (Telegram, si está activo).
+            ExternalNotify.shared.notify("⏰ \(t.title)", event: .reminder)
             // Con el panel abierto ya ves las tareas: sin píldora (pero el
             // sistema sí suena) y no se marca hasta avisar de verdad.
             let pill = (t.notifyMode == .pill || t.notifyMode == .both) && !panelOpen

@@ -93,6 +93,11 @@ struct SettingsModalView: View {
     @State private var launchLogin = false
     @State private var storageSize = "—"
     @ObservedObject private var calService = CalService.shared
+    @State private var tgToken = ""
+    @State private var tgChat = ""
+    @State private var tgStatus = ""
+    @State private var tgOk = false
+    @State private var waOpen = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -592,8 +597,83 @@ struct SettingsModalView: View {
                     }
                 }
             }
+            // Notificaciones externas: Telegram (envía) y WhatsApp (abre).
+            SettingsCard(label: tr("set.notifExt"), icon: "paperplane.fill", accent: settings.accent) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 6) {
+                        NotchTextField(
+                            placeholder: tr("set.tgToken"), text: $tgToken,
+                            icon: "key.fill", color: settings.accent, font: .caption,
+                            onCommit: { ExternalNotify.shared.setToken(tgToken) })
+                        NotchTextField(
+                            placeholder: tr("set.tgChat"), text: $tgChat,
+                            icon: "number", color: settings.accent, font: .caption,
+                            onCommit: { ExternalNotify.shared.tgChatId = tgChat })
+                    }
+                    HStack(spacing: 8) {
+                        Button(tr("set.tgTest")) { testTelegram() }
+                            .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
+                        if !tgStatus.isEmpty {
+                            HStack(spacing: 4) {
+                                Circle().fill(tgOk ? Color.green : Color(hex: "E0574B"))
+                                    .frame(width: 6, height: 6)
+                                Text(tgStatus).font(.notchMono(10)).foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        Toggle("", isOn: Binding(get: { ExternalNotify.shared.tgEnabled },
+                                                 set: { ExternalNotify.shared.tgEnabled = $0 }))
+                            .toggleStyle(NotchToggleStyle(color: settings.accent, mini: true))
+                            .labelsHidden()
+                    }
+                    Divider().background(Color.white.opacity(0.07))
+                    // Qué eventos salen por Telegram.
+                    IconToggleRow(icon: "checkmark.circle.fill", label: tr("set.agentToast"),
+                                  isOn: Binding(get: { ExternalNotify.shared.tgEvtDone },
+                                                set: { ExternalNotify.shared.tgEvtDone = $0 }),
+                                  accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    IconToggleRow(icon: "hand.raised.fill", label: tr("set.waitToast"),
+                                  isOn: Binding(get: { ExternalNotify.shared.tgEvtWaiting },
+                                                set: { ExternalNotify.shared.tgEvtWaiting = $0 }),
+                                  accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    IconToggleRow(icon: "bell.badge.fill", label: tr("set.reminders"),
+                                  isOn: Binding(get: { ExternalNotify.shared.tgEvtReminder },
+                                                set: { ExternalNotify.shared.tgEvtReminder = $0 }),
+                                  accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    // WhatsApp: sin API personal, solo abre el chat.
+                    IconToggleRow(icon: "bubble.left.fill", label: tr("set.waOpen"),
+                                  subtitle: tr("set.waOpenSub"),
+                                  isOn: $waOpen, accent: settings.accent) {
+                        ExternalNotify.shared.waOpenDone = waOpen
+                    }
+                    HStack(spacing: 6) {
+                        Button(tr("set.waTest")) { ExternalNotify.shared.openWhatsApp(tr("set.testMsg")) }
+                            .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
+                        Spacer()
+                    }
+                    Text(tr("set.notifHint"))
+                        .font(.caption2)
+                        .foregroundStyle(Color.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
-        .onAppear { CalService.shared.refreshStatus() }
+        .onAppear {
+            CalService.shared.refreshStatus()
+            tgToken = ExternalNotify.shared.token ?? ""
+            tgChat = ExternalNotify.shared.tgChatId
+            waOpen = ExternalNotify.shared.waOpenDone
+        }
+    }
+
+    private func testTelegram() {
+        ExternalNotify.shared.send(tr("set.testMsg"), event: .done, force: true) { ok in
+            tgOk = ok
+            tgStatus = ok ? tr("set.tgOk") : tr("set.tgFail")
+        }
     }
 
     private func openInternetAccounts() {

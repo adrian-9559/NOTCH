@@ -121,6 +121,8 @@ struct NotchSegments<V: Hashable>: View {
     var options: [(V, String)]
     var color: Color = NotchSettings.shared.accent
     var disabledAll = false
+    /// Ocupa todo el ancho disponible (segmentos equitativos).
+    var fill = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -132,6 +134,7 @@ struct NotchSegments<V: Hashable>: View {
                 .font(.system(size: 11, weight: sel ? .semibold : .regular))
                 .foregroundStyle(sel ? color : Color.white.opacity(0.6))
                 .padding(.horizontal, 10).padding(.vertical, 5)
+                .frame(maxWidth: fill ? .infinity : nil)
                 .background(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .fill(sel ? color.opacity(0.2) : Color.clear)

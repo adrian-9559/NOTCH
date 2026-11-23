@@ -330,6 +330,14 @@ func severityColor(fraction: Double) -> Color {
 
 // MARK: - Pestaña Mac estilo Lumio
 
+/// Altura natural de cada columna de la pareja (loads/servers).
+private struct ColHeightKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        for (k, v) in nextValue() { value[k] = v }
+    }
+}
+
 struct StatsView: View {
     var sessions: SessionStore
     @ObservedObject private var settings = NotchSettings.shared
@@ -352,6 +360,10 @@ struct StatsView: View {
     /// Orden y búsqueda de la tabla de procesos.
     @State private var sortByCpu = true
     @State private var procQuery = ""
+    /// Alturas naturales de las dos columnas (para igualarlas).
+    @State private var naturalHeights: [String: CGFloat] = [:]
+    /// "Ver más": expandir la pareja a altura libre.
+    @State private var expandPair = false
     /// Sparklines de 90 s (una muestra por refresco ligero).
     @State private var cpuHist: [Double] = []
     @State private var memHist: [Double] = []
@@ -370,23 +382,34 @@ struct StatsView: View {
             foldCard(title: tr("mac.last24"), icon: "chart.bar.fill", folded: $foldDay) {
                 DayChart(hours: history.last24h())
             }
-            // Qué carga el Mac y los servidores: uno al lado del otro.
+            // Qué carga el Mac y los servidores: uno al lado del otro,
+            // a la MISMA altura (la de la columna más baja); si uno
+            // desborda, su "Ver más" lo expande.
+            let loadsNat = naturalHeights["loads"] ?? 0
+            let serversNat = naturalHeights["servers"] ?? 0
+            let pairCap: CGFloat? = {
+                guard !expandPair, loadsNat > 0, serversNat > 0 else { return nil }
+                let lo = min(loadsNat, serversNat)
+                return max(loadsNat, serversNat) > lo + 4 ? lo : nil
+            }()
             HStack(alignment: .top, spacing: 10) {
                 // Qué carga el Mac (plegable): tabla ordenable con buscador.
                 foldCard(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total",
                          icon: "list.bullet.rectangle", folded: $foldLoads) {
+                    // Filtros pegados al borde: CPU/MEM a la izquierda
+                    // y buscador a todo el resto del ancho.
                     HStack(spacing: 6) {
                         NotchSegments(
                             selection: $sortByCpu,
                             options: [(true, "CPU"), (false, "MEM")],
                             color: settings.accent
                         )
-                        .frame(maxWidth: 150)
                         NotchTextField(
                             placeholder: tr("mac.search"), text: $procQuery,
                             icon: "magnifyingglass",
                             color: settings.accent, font: .caption
                         )
+                        .frame(maxWidth: .infinity)
                     }
                     if sortedProcs.isEmpty {
                         Text(tr("mac.noMatch")).font(.caption).foregroundStyle(.secondary)
@@ -427,6 +450,10 @@ struct StatsView: View {
                         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
                     }
                 }
+                .background(heightReporter("loads"))
+                .frame(height: pairCap)
+                .clipped()
+                .overlay(alignment: .bottom) { pairMore(loadsNat, cap: pairCap) }
                 // Servidores de agentes (máx. 5 + resto, como Lumio).
                 foldCard(
                     title: tr("mac.servers"),
@@ -450,6 +477,10 @@ struct StatsView: View {
                         }
                     }
                 }
+                .background(heightReporter("servers"))
+                .frame(height: pairCap)
+                .clipped()
+                .overlay(alignment: .bottom) { pairMore(serversNat, cap: pairCap) }
             }
 
             // Limpieza de datos temporales de agentes (solo parados).
@@ -470,6 +501,46 @@ struct StatsView: View {
         }
         .onReceive(light) { _ in refreshLight() }
         .onReceive(heavy) { _ in refreshHeavy() }
+        // Al plegar cambia la altura natural: se vuelve a medir.
+        .onChange(of: foldLoads) { _ in naturalHeights = [:] }
+        .onChange(of: foldServers) { _ in naturalHeights = [:] }
+        .onPreferenceChange(ColHeightKey.self) { add in
+            naturalHeights.merge(add) { old, new in max(old, new) }
+        }
+    }
+
+    /// Mide la altura natural de una columna (se queda con el máximo
+    /// para que el tope no entre en bucle con la medida recortada).
+    private func heightReporter(_ id: String) -> some View {
+        GeometryReader { geo in
+            Color.clear.preference(key: ColHeightKey.self, value: [id: geo.size.height])
+        }
+    }
+
+    /// Botón flotante "Ver más" para la columna que desborda.
+    @ViewBuilder
+    private func pairMore(_ nat: CGFloat, cap: CGFloat?) -> some View {
+        if let cap, nat > cap + 4 {
+            VStack {
+                Spacer(minLength: 0)
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { expandPair = true }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(tr("mac.verMas"))
+                            .font(.notchMono(10))
+                    }
+                    .padding(.horizontal, 11).padding(.vertical, 5)
+                    .background(Capsule().fill(Color.black.opacity(0.72)))
+                    .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 8)
+            }
+            .frame(maxWidth: .infinity)
+        }
     }
 
     // MARK: - piezas

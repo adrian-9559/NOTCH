@@ -72,9 +72,43 @@ public extension AgentDetector {
         }
 
         let sid = latestPath ?? "\(agent.rawValue)-proc"
-        return [AgentSession(agent: agent, sessionID: sid, status: status, pid: pid,
-                             cpuPercent: procs.isEmpty ? nil : cpu,
-                             lastActivity: latestMtime, projectPath: nil, detail: detail)]
+
+        // Instancias: si hay VARIOS binarios principales del mismo agente
+        // (p. ej. tres TUIs de OpenCode en terminales distintas) y está
+        // trabajando, cada proceso es SU fila: se ven las conversaciones
+        // por separado en lugar de una sola. Se ignoran los de
+        // infraestructura (serve/daemon/--service).
+        func baseOf(_ command: String) -> String {
+            let first = command.split(separator: " ").first.map(String.init) ?? command
+            return (first.split(separator: "/").last.map(String.init) ?? first).lowercased()
+        }
+        let infra = ["serve", "daemon", "--service"]
+        let primary = ranked.first.map { baseOf($0.command) } ?? ""
+        let instances = procs.filter { p in
+            let b = baseOf(p.command)
+            return !primary.isEmpty && b == primary
+                && !infra.contains { p.command.lowercased().contains($0) }
+        }
+        .sorted { $0.cpu > $1.cpu }
+        let split = instances.count > 1 && status == .working
+        let targets: [(pid: Int32?, cpu: Double)] = split
+            ? instances.map { ($0.pid, $0.cpu) }
+            : [(ranked.first?.pid, cpu)]
+
+        return targets.map { t in
+            // Cada instancia con su propio CPU: la quieta no se cuelga
+            // de la trabajando (va a "inactivo" en recientes).
+            let st: AgentStatus = (split && t.cpu <= 0.5) ? .idle : status
+            return AgentSession(
+                agent: agent,
+                sessionID: split ? "\(sid)#\(t.pid ?? 0)" : sid,
+                status: st,
+                pid: t.pid,
+                cpuPercent: procs.isEmpty ? nil : (split ? t.cpu : cpu),
+                lastActivity: latestMtime,
+                projectPath: nil,
+                detail: detail)
+        }
     }
 
     private func isRecent(_ date: Date?, within seconds: TimeInterval) -> Bool {

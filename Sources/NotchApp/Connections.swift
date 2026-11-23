@@ -261,7 +261,9 @@ final class WeatherStore: ObservableObject {
     /// No se guarda: si luego hay ciudad o ubicación, mandan ellas.
     func tzFallbackFetch() -> Bool {
         let id = TimeZone.current.identifier
+        fputs("NOTCH-DBG tz id=\(id)\n", stderr)
         guard let hit = Self.tzCities[id] else { return false }
+        fputs("NOTCH-DBG tz hit=\(hit.city)\n", stderr)
         fetch(lat: hit.lat, lon: hit.lon, place: hit.city)
         return true
     }
@@ -363,6 +365,7 @@ final class WeatherStore: ObservableObject {
         CLGeocoder().geocodeAddressString(q) { [weak self] marks, _ in
             guard let self else { return }
             guard let m = marks?.first, let c = m.location?.coordinate else {
+                fputs("NOTCH-DBG error-set=denied-loc\n", stderr)
                 DispatchQueue.main.async { self.loading = false; self.error = true }
                 return
             }
@@ -400,6 +403,7 @@ final class WeatherStore: ObservableObject {
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let self, let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                fputs("NOTCH-DBG error-set=network\n", stderr)
                 DispatchQueue.main.async { self?.loading = false; self?.error = true }
                 return
             }
@@ -435,6 +439,7 @@ final class WeatherStore: ObservableObject {
                       let d = dayFmt.date(from: dTimes[i]) else { continue }
                 days.append(DayPoint(date: d, tmax: dMax[i], tmin: dMin[i], code: dCodes[i]))
             }
+            fputs("NOTCH-DBG weather resp temp=\(String(describing: cur["temperature_2m"])) err=\(String(describing: json["error"]))\n", stderr)
             DispatchQueue.main.async {
                 self.place = place
                 self.temp = cur["temperature_2m"] as? Double
@@ -640,6 +645,7 @@ struct WeatherView: View {
             store.loadPlaces()
             store.loadDefault()
         }
+
     }
 
     // MARK: - Ahora: hora grande + estado + métricas

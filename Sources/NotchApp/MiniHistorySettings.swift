@@ -33,8 +33,24 @@ final class HistoryStore: ObservableObject {
 
     /// Solo registra transiciones (working→waiting→done…), no cada poll.
     func record(_ sessions: [AgentSession]) {
-        var fresh: [HistoryEvent] = []
+        // Varias instancias del mismo agente: se registra su mejor
+        // estado (working > waiting > done > resto) para no escribir
+        // transiciones falsas por la instancia quieta.
+        func rank(_ s: AgentStatus) -> Int {
+            switch s {
+            case .working: return 4
+            case .waiting: return 3
+            case .done: return 2
+            default: return 1
+            }
+        }
+        var best: [String: AgentSession] = [:]
         for s in sessions {
+            if let b = best[s.agent.rawValue], rank(b.status) >= rank(s.status) { continue }
+            best[s.agent.rawValue] = s
+        }
+        var fresh: [HistoryEvent] = []
+        for s in best.values {
             if lastByAgent[s.agent.rawValue] != s.status.rawValue {
                 lastByAgent[s.agent.rawValue] = s.status.rawValue
                 fresh.append(HistoryEvent(ts: Date(), agent: s.agent.displayName, status: s.status.rawValue))

@@ -144,6 +144,12 @@ final class NotchLightsController {
             panels.append(makePanel(frame: frame, onTap: onTap))
         }
         cancellables.removeAll()
+        // El parte puede llegar DESPUÉS (red): al entrar la temperatura,
+        // reevaluar tira de clima vs píldora de música.
+        WeatherStore.shared.$temp
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateVisibility() }
+            .store(in: &cancellables)
         // Sin música no hay píldora: se ordena fuera.
         let m0 = NotchContext.shared.music
         m0.$title

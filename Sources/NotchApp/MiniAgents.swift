@@ -54,21 +54,21 @@ struct AgentsView: View {
             }
             if !waiting.isEmpty {
                 NotchTag(icon: "hand.raised.fill", text: tr("agents.need"), color: settings.accent)
-                ForEach(waiting, id: \.agent) { s in
+                ForEach(waiting, id: \.sessionID) { s in
                     waitingCard(s)
                 }
             }
             if !working.isEmpty {
                 NotchTag(icon: "arrow.triangle.2.circlepath", text: tr("agents.working"),
                          color: Color(hex: "4C8FD8"))
-                ForEach(working, id: \.agent) { s in
+                ForEach(working, id: \.sessionID) { s in
                     loadingRow(s)
                 }
             }
             if !recent.isEmpty {
                 NotchTag(icon: "clock.arrow.circlepath", text: tr("agents.recent"),
                          color: Color.white.opacity(0.55))
-                ForEach(recent, id: \.agent) { s in
+                ForEach(recent, id: \.sessionID) { s in
                     recentRow(s)
                 }
             }
