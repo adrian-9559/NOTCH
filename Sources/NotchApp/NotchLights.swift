@@ -11,10 +11,6 @@ import SwiftUI
 struct NotchLightsView: View {
     @ObservedObject private var music = NotchContext.shared.music
     var onTap: () -> Void = {}
-    /// Distancia desde el borde superior hasta el contenido: el corte
-    /// FÍSICO del notch (p. ej.37.5 pt) no tiene píxeles, así que la
-    /// fila (carátula/tiempo/EQ) cuelga por debajo de él.
-    var topInset: CGFloat = 41.5
 
     /// Firma para animar la aparición y el progreso.
     private var musicSig: String { "\(music.title)|\(music.playing)|\(music.artwork != nil)|\(music.playerLive)" }
@@ -78,10 +74,7 @@ struct NotchLightsView: View {
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.top, topInset)
-            // La fila vive por debajo del notch: allí sí hay píxeles
-            // en toda la anchura (el centro superior no los tiene).
-            .frame(width: 300, height: topInset + 32, alignment: .top)
+            .frame(width: 300, height: 40)
             .background(pillGlass)
             .opacity(music.playing ? 1 : 0.8)
             Spacer(minLength: 0)
@@ -142,18 +135,15 @@ final class NotchLightsController {
         weatherPanels = []
         for entry in notches where entry.layout.hasNotch {
             let n = entry.layout.notchRect
-            // Misma forma y sitio para píldora y tira, colgando por
-            // DEBAJO del notch: el corte físico (n.height, p. ej.
-            //37.5 pt en el centro superior) no tiene píxeles, así que
-            // la fila de contenido (icono/tiempo/temperatura) empieza
-            // tras él — antes el centro quedaba bajo el agujero y solo
-            // se veían las esquinas (nube + °C sin temperatura).
-            let topInset = n.height + 4
-            let w: CGFloat = 300, h: CGFloat = topInset + 32
+            // Misma forma y sitio para píldora y tira (300×40 pegada
+            // arriba). OJO: el corte físico del notch (x856–1064 aquí)
+            // no tiene píxeles — por eso la temperatura va a la
+            // DERECHA (fuera del recorte) y el centro queda libre.
+            let w: CGFloat = 300, h: CGFloat = 40
             let frame = NSRect(x: n.midX - w / 2, y: n.maxY - h, width: w, height: h)
-            weatherPanels.append(makeStripPanel(frame: frame, topInset: topInset))
-            fputs("NOTCH-LIGHTS notch=\(n) pill=\(frame) inset=\(topInset)\n", stderr)
-            panels.append(makePanel(frame: frame, topInset: topInset, onTap: onTap))
+            weatherPanels.append(makeStripPanel(frame: frame))
+            fputs("NOTCH-LIGHTS notch=\(n) pill=\(frame)\n", stderr)
+            panels.append(makePanel(frame: frame, onTap: onTap))
         }
         cancellables.removeAll()
         // El parte puede llegar DESPUÉS (red): al entrar la temperatura,
@@ -245,8 +235,7 @@ final class NotchLightsController {
         return (hasSong ? panels : weatherPanels).map { $0.frame }
     }
 
-    private func makePanel(frame: NSRect, topInset: CGFloat,
-                           onTap: @escaping () -> Void) -> NSPanel {
+    private func makePanel(frame: NSRect, onTap: @escaping () -> Void) -> NSPanel {
         let p = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -261,13 +250,12 @@ final class NotchLightsController {
         p.hidesOnDeactivate = false
         p.alphaValue = 0
         p.ignoresMouseEvents = false
-        p.contentView = FirstMouseHostingView(
-            rootView: NotchLightsView(onTap: onTap, topInset: topInset))
+        p.contentView = FirstMouseHostingView(rootView: NotchLightsView(onTap: onTap))
         return p
     }
 
     /// Ventana de clima: mismo rectángulo que el notch, solo lectura.
-    private func makeStripPanel(frame: NSRect, topInset: CGFloat) -> NSPanel {
+    private func makeStripPanel(frame: NSRect) -> NSPanel {
         let p = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -283,20 +271,21 @@ final class NotchLightsController {
         p.alphaValue = 0
         // Solo lectura: no intercepta clics de la barra de menús.
         p.ignoresMouseEvents = true
-        p.contentView = NSHostingView(rootView: NotchWeatherStripView(topInset: topInset))
+        p.contentView = NSHostingView(rootView: NotchWeatherStripView())
         return p
     }
 }
 
-/// Clima en el notch cerrado: réplica de la píldora de música en el
-/// mismo rectángulo — el icono del parte donde va la carátula y la
-/// temperatura donde va el tiempo + progreso. Sin datos: invisible.
+/// Clima en el notch cerrado: píldora compacta de40 pt como la de
+/// siempre — el icono del parte a la izquierda y la temperatura a la
+/// derecha, FUERA del corte físico del notch (x856–1064 no tiene
+/// píxeles: el centro no sirve). Sin etiqueta de unidad: el número
+/// ya sale en la unidad elegida en Ajustes. Sin datos: invisible.
 struct NotchWeatherStripView: View {
     @ObservedObject private var w = WeatherStore.shared
+    /// Para re-renderizar al cambiar ºC/ºF en Ajustes (fmtTemp lee
+    /// NotchSettings.shared).
     @ObservedObject private var settings = NotchSettings.shared
-    /// Igual que la píldora: el contenido cuelga por debajo del
-    /// corte físico del notch (donde sí hay píxeles).
-    var topInset: CGFloat = 41.5
 
     var body: some View {
         HStack(spacing: 8) {
@@ -313,50 +302,21 @@ struct NotchWeatherStripView: View {
             .frame(width: 24, height: 24)
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             Spacer(minLength: 8)
-            // Temperatura donde va el tiempo + barra de progreso.
-            VStack(alignment: .trailing, spacing: 3) {
-                if let t = w.temp {
-                    Text(fmtTemp(t))
-                        .font(.notchMono(13))
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                    // Barra frío→cálido con el marcador de la hora
-                    // actual dentro del rango de hoy (si hay partes).
-                    rangeBar(t)
-                }
+            // Temperatura al extremo derecho: esa banda (x1064–1100)
+            // queda fuera del recorte y se ve en la pantalla real.
+            if let t = w.temp {
+                Text(fmtTemp(t))
+                    .font(.notchMono(13))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
             }
-            Spacer(minLength: 8)
-            // Unidad en el hueco del EQ (quieto, sin animación).
-            Text(settings.tempUnit == "F" ? "°F" : "°C")
-                .font(.notchMono(10))
-                .foregroundStyle(Color.white.opacity(0.55))
         }
         .padding(.horizontal, 10)
-        .padding(.top, topInset)
-        .frame(width: 300, height: topInset + 32, alignment: .top)
+        .frame(width: 300, height: 40)
         .background(stripGlass)
         // Sin datos aún: invisible (el fundido del panel ya lo oculta).
         .opacity(w.temp == nil ? 0 : 1)
         .animation(.easeInOut(duration: 0.35), value: w.temp == nil)
-    }
-
-    /// Rango de hoy (mín→máx) como barra de70 px, con marcador.
-    private func rangeBar(_ t: Double) -> some View {
-        let lo = w.days.first?.tmin ?? (t - 4)
-        let hi = w.days.first?.tmax ?? (t + 4)
-        let frac = hi > lo ? CGFloat((t - lo) / (hi - lo)) : 0.5
-        return ZStack(alignment: .leading) {
-            Capsule().fill(Color.white.opacity(0.2)).frame(width: 70, height: 3)
-            Capsule()
-                .fill(LinearGradient(colors: [Color(hex: "4C8FD8"), Color(hex: "F2B33D")],
-                                     startPoint: .leading, endPoint: .trailing))
-                .frame(width: 70, height: 3)
-            Circle()
-                .fill(Color.white)
-                .frame(width: 5, height: 5)
-                .offset(x: max(0, min(65, 70 * frac)))
-        }
-        .frame(width: 70, height: 5, alignment: .leading)
     }
 
     /// Mismo material que la píldora: negro puro, pegada arriba,
