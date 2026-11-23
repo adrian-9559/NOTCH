@@ -362,7 +362,7 @@ struct StatsView: View {
     @State private var procQuery = ""
     /// Alturas naturales de las dos columnas (para igualarlas).
     @State private var naturalHeights: [String: CGFloat] = [:]
-    /// "Ver más": expandir la pareja a altura libre.
+    /// "Ver más": expandir la pareja (más filas + altura libre).
     @State private var expandPair = false
     /// Sparklines de 90 s (una muestra por refresco ligero).
     @State private var cpuHist: [Double] = []
@@ -383,8 +383,9 @@ struct StatsView: View {
                 DayChart(hours: history.last24h())
             }
             // Qué carga el Mac y los servidores: uno al lado del otro,
-            // a la MISMA altura (la de la columna más baja); si uno
-            // desborda, su "Ver más" lo expande.
+            // a la MISMA altura (la de la columna más baja). Las
+            // cabeceras se ven siempre; «ver más» añade INFORMACIÓN
+            // (más filas) y suelta el tope de altura.
             let loadsNat = naturalHeights["loads"] ?? 0
             let serversNat = naturalHeights["servers"] ?? 0
             let pairCap: CGFloat? = {
@@ -395,24 +396,21 @@ struct StatsView: View {
             HStack(alignment: .top, spacing: 10) {
                 // Qué carga el Mac (plegable): tabla ordenable con buscador.
                 foldCard(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total",
-                         icon: "list.bullet.rectangle", folded: $foldLoads,
-                         compact: !expandPair) {
-                    // Compacto: sin filtros; «ver más» los devuelve
-                    // junto con la cabecera, al expandir lo de dentro.
-                    if expandPair {
-                        HStack(spacing: 6) {
-                            NotchSegments(
-                                selection: $sortByCpu,
-                                options: [(true, "CPU"), (false, "MEM")],
-                                color: settings.accent
-                            )
-                            NotchTextField(
-                                placeholder: tr("mac.search"), text: $procQuery,
-                                icon: "magnifyingglass",
-                                color: settings.accent, font: .caption
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
+                         icon: "list.bullet.rectangle", folded: $foldLoads) {
+                    // Filtros pegados al borde: CPU/MEM a la izquierda
+                    // y buscador a todo el resto del ancho.
+                    HStack(spacing: 6) {
+                        NotchSegments(
+                            selection: $sortByCpu,
+                            options: [(true, "CPU"), (false, "MEM")],
+                            color: settings.accent
+                        )
+                        NotchTextField(
+                            placeholder: tr("mac.search"), text: $procQuery,
+                            icon: "magnifyingglass",
+                            color: settings.accent, font: .caption
+                        )
+                        .frame(maxWidth: .infinity)
                     }
                     if sortedProcs.isEmpty {
                         Text(tr("mac.noMatch")).font(.caption).foregroundStyle(.secondary)
@@ -420,7 +418,8 @@ struct StatsView: View {
                         // Ranking compacto con barra proporcional detrás:
                         // se entiende de un vistazo qué carga la máquina.
                         let maxMem = max(1, sortedProcs.map(\.memMB).max() ?? 1)
-                        ForEach(sortedProcs.prefix(6), id: \.pid) { t in
+                        // Con «ver más» expandido: de6 a14 filas.
+                        ForEach(sortedProcs.prefix(expandPair ? 14 : 6), id: \.pid) { t in
                             ProcRow(
                                 t: t, color: procColor(t),
                                 value: sortByCpu ? "\(Int(t.pct.rounded()))%" : memMBString(t.memMB),
@@ -456,17 +455,22 @@ struct StatsView: View {
                 .background(heightReporter("loads"))
                 .frame(height: pairCap)
                 .clipped()
-                .overlay(alignment: .bottom) { pairMore(loadsNat, cap: pairCap, force: !expandPair) }
+                .overlay(alignment: .bottom) {
+                    pairMore(loadsNat, cap: pairCap, force: !expandPair && !foldLoads)
+                }
                 // Servidores de agentes (máx. 5 + resto, como Lumio).
                 foldCard(
                     title: tr("mac.servers"),
-                    sub: snap.servers.count > 5 ? "+\(snap.servers.count - 5)" : "",
+                    sub: expandPair
+                        ? (snap.servers.count > 10 ? "+\(snap.servers.count - 10)" : "")
+                        : (snap.servers.count > 5 ? "+\(snap.servers.count - 5)" : ""),
                     icon: "network", folded: $foldServers
                 ) {
                     if snap.servers.isEmpty {
                         Text(tr("mac.noServers")).font(.caption).foregroundStyle(.secondary)
                     } else {
-                        ForEach(snap.servers.prefix(5), id: \.port) { sv in
+                        // Con «ver más» expandido: de5 a10 servidores.
+                        ForEach(snap.servers.prefix(expandPair ? 10 : 5), id: \.port) { sv in
                             HStack(spacing: 8) {
                                 Image(systemName: "square").font(.system(size: 9)).foregroundStyle(.secondary)
                                 // verbatim: si no, el Int se localiza ("24.282").
@@ -483,7 +487,9 @@ struct StatsView: View {
                 .background(heightReporter("servers"))
                 .frame(height: pairCap)
                 .clipped()
-                .overlay(alignment: .bottom) { pairMore(serversNat, cap: pairCap) }
+                .overlay(alignment: .bottom) {
+                    pairMore(serversNat, cap: pairCap, force: !expandPair && !foldServers)
+                }
             }
 
             // Limpieza de datos temporales de agentes (solo parados).
@@ -524,8 +530,9 @@ struct StatsView: View {
     /// Botón flotante "Ver más" para la columna que desborda.
     @ViewBuilder
     private func pairMore(_ nat: CGFloat, cap: CGFloat?, force: Bool = false) -> some View {
-        // `force`: loads lo muestra SIEMPRE (para expandir lo de
-        // dentro), aunque su columna no desborde la pareja.
+        // `force`: la columna muestra el botón SIEMPRE que esté
+        // plegada sin expandir (para ver más filas), aunque su
+        // altura no desborde la pareja.
         if force || (cap.map { nat > $0 + 4 } ?? false) {
             VStack {
                 Spacer(minLength: 0)
@@ -554,18 +561,18 @@ struct StatsView: View {
     /// Tarjeta plegable con cabecera clicable (icono + rótulo + dato).
     private func foldCard<Content: View>(
         title: String, sub: String = "", icon: String,
-        folded: Binding<Bool>, compact: Bool = false,
+        folded: Binding<Bool>,
         @ViewBuilder content: () -> Content
     ) -> some View {
         NotchCard {
             // Una sola vista (ver NotchCard): cabecera + contenido.
-            // Modo compacto: SIN cabecera, el contenido empieza arriba
-            // del todo (What loads hasta pulsar «ver más»).
+            // La cabecera SIEMPRE se ve (lo pidió el usuario); «ver
+            // más» es lo que despliega información (más filas).
             VStack(alignment: .leading, spacing: 8) {
-                if !compact { foldHeader(title: title, sub: sub, icon: icon, folded: folded) }
-                if compact || !folded.wrappedValue {
+                foldHeader(title: title, sub: sub, icon: icon, folded: folded)
+                if !folded.wrappedValue {
                     content()
-                        .padding(.top, compact ? 0 : 8)
+                        .padding(.top, 8)
                 }
             }
         }

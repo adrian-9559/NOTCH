@@ -159,6 +159,11 @@ struct NotchRootView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 9)
                         .padding(.horizontal, 12)
+                        // El bocadillo de la pestaña cuelga hacia el
+                        // contenido: sin zIndex el ScrollView (hermano
+                        // posterior) se lo dibujaba POR ENCIMA y el
+                        // nombre quedaba «detrás de las cosas».
+                        .zIndex(1)
 
                         // Separador fino a todo el ancho, como Lumio.
                         Rectangle()
