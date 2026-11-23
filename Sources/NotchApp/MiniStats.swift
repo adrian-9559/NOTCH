@@ -366,88 +366,92 @@ struct StatsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             measurementsCard
-            // Qué carga el Mac (plegable): tabla ordenable con buscador.
-            foldCard(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total",
-                     icon: "list.bullet.rectangle", folded: $foldLoads) {
-                HStack(spacing: 6) {
-                    NotchSegments(
-                        selection: $sortByCpu,
-                        options: [(true, "CPU"), (false, "MEM")],
-                        color: settings.accent
-                    )
-                    .frame(maxWidth: 150)
-                    NotchTextField(
-                        placeholder: tr("mac.search"), text: $procQuery,
-                        icon: "magnifyingglass",
-                        color: settings.accent, font: .caption
-                    )
-                }
-                if sortedProcs.isEmpty {
-                    Text(tr("mac.noMatch")).font(.caption).foregroundStyle(.secondary)
-                } else {
-                    // Ranking compacto con barra proporcional detrás:
-                    // se entiende de un vistazo qué carga la máquina.
-                    let maxMem = max(1, sortedProcs.map(\.memMB).max() ?? 1)
-                    ForEach(sortedProcs.prefix(6), id: \.pid) { t in
-                        ProcRow(
-                            t: t, color: procColor(t),
-                            value: sortByCpu ? "\(Int(t.pct.rounded()))%" : memMBString(t.memMB),
-                            fraction: CGFloat(min(1, sortByCpu
-                                ? t.pct / max(1, totalCpu)
-                                : t.memMB / maxMem)),
-                            expanded: expandedPid == t.pid,
-                            onToggle: { expandedPid = expandedPid == t.pid ? 0 : t.pid }
-                        )
-                    }
-                }
-                HStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.3)).frame(width: 9, height: 9)
-                    Text(tr("mac.rest")).font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
-                    Spacer()
-                    Text(verbatim: "\(Int(loadRest.rounded()))%").font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
-                }
-                // Detalle del proceso desplegado: para entender y optimizar.
-                if let t = snap.tops.first(where: { $0.pid == expandedPid }) {
-                    HStack(spacing: 8) {
-                        Text(verbatim: "PID \(t.pid) · \(Int(t.memMB.rounded())) MB · \(t.user) · \(t.etime)")
-                            .font(.notchMono(10)).foregroundStyle(.secondary).lineLimit(1)
-                        Spacer()
-                        if t.pid > 500 {
-                            Button(tr("mac.terminate")) { confirmStop(t) }
-                                .buttonStyle(NotchGhostButton(size: .mini))
-                        }
-                    }
-                    .padding(.horizontal, 8).padding(.vertical, 5)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
-                }
-            }
-            // Actividad de agentes 24 h (del historial local).
+            // Arriba: la actividad de las últimas 24 h.
             foldCard(title: tr("mac.last24"), icon: "chart.bar.fill", folded: $foldDay) {
                 DayChart(hours: history.last24h())
             }
-            // Servidores de agentes (máx. 5 + resto, como Lumio).
-            foldCard(
-                title: tr("mac.servers"),
-                sub: snap.servers.count > 5 ? "+\(snap.servers.count - 5)" : "",
-                icon: "network", folded: $foldServers
-            ) {
-                if snap.servers.isEmpty {
-                    Text(tr("mac.noServers")).font(.caption).foregroundStyle(.secondary)
-                } else {
-                    ForEach(snap.servers.prefix(5), id: \.port) { sv in
-                        HStack(spacing: 8) {
-                            Image(systemName: "square").font(.system(size: 9)).foregroundStyle(.secondary)
-                            // verbatim: si no, el Int se localiza ("24.282").
-                            Text(verbatim: ":\(sv.port) \(sv.proc)").font(.notchMono(11)).foregroundStyle(.white)
-                            Text(sv.agent.map { "\($0) · \(tr("mac.running"))" } ?? tr("mac.process")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            Spacer()
-                            Button(tr("mac.open")) { MacPanelReader.openPort(sv.port) }.buttonStyle(NotchGhostButton(size: .small, tint: Color(hex: "2F9E6E")))
-                            Button(tr("mac.stop")) { MacPanelReader.stopPid(sv.pid); refreshHeavy() }.buttonStyle(NotchGhostButton(size: .small))
+            // Qué carga el Mac y los servidores: uno al lado del otro.
+            HStack(alignment: .top, spacing: 10) {
+                // Qué carga el Mac (plegable): tabla ordenable con buscador.
+                foldCard(title: tr("mac.loads"), sub: "\(Int(totalCpu.rounded()))% total",
+                         icon: "list.bullet.rectangle", folded: $foldLoads) {
+                    HStack(spacing: 6) {
+                        NotchSegments(
+                            selection: $sortByCpu,
+                            options: [(true, "CPU"), (false, "MEM")],
+                            color: settings.accent
+                        )
+                        .frame(maxWidth: 150)
+                        NotchTextField(
+                            placeholder: tr("mac.search"), text: $procQuery,
+                            icon: "magnifyingglass",
+                            color: settings.accent, font: .caption
+                        )
+                    }
+                    if sortedProcs.isEmpty {
+                        Text(tr("mac.noMatch")).font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        // Ranking compacto con barra proporcional detrás:
+                        // se entiende de un vistazo qué carga la máquina.
+                        let maxMem = max(1, sortedProcs.map(\.memMB).max() ?? 1)
+                        ForEach(sortedProcs.prefix(6), id: \.pid) { t in
+                            ProcRow(
+                                t: t, color: procColor(t),
+                                value: sortByCpu ? "\(Int(t.pct.rounded()))%" : memMBString(t.memMB),
+                                fraction: CGFloat(min(1, sortByCpu
+                                    ? t.pct / max(1, totalCpu)
+                                    : t.memMB / maxMem)),
+                                expanded: expandedPid == t.pid,
+                                onToggle: { expandedPid = expandedPid == t.pid ? 0 : t.pid }
+                            )
                         }
-                        .font(.caption)
+                    }
+                    HStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.3)).frame(width: 9, height: 9)
+                        Text(tr("mac.rest")).font(.notchMono(11)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+                        Spacer()
+                        Text(verbatim: "\(Int(loadRest.rounded()))%").font(.notchMono(11)).foregroundStyle(.secondary).monospacedDigit()
+                    }
+                    // Detalle del proceso desplegado: para entender y optimizar.
+                    if let t = snap.tops.first(where: { $0.pid == expandedPid }) {
+                        HStack(spacing: 8) {
+                            Text(verbatim: "PID \(t.pid) · \(Int(t.memMB.rounded())) MB · \(t.user) · \(t.etime)")
+                                .font(.notchMono(10)).foregroundStyle(.secondary).lineLimit(1)
+                            Spacer()
+                            if t.pid > 500 {
+                                Button(tr("mac.terminate")) { confirmStop(t) }
+                                    .buttonStyle(NotchGhostButton(size: .mini))
+                            }
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
+                    }
+                }
+                // Servidores de agentes (máx. 5 + resto, como Lumio).
+                foldCard(
+                    title: tr("mac.servers"),
+                    sub: snap.servers.count > 5 ? "+\(snap.servers.count - 5)" : "",
+                    icon: "network", folded: $foldServers
+                ) {
+                    if snap.servers.isEmpty {
+                        Text(tr("mac.noServers")).font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(snap.servers.prefix(5), id: \.port) { sv in
+                            HStack(spacing: 8) {
+                                Image(systemName: "square").font(.system(size: 9)).foregroundStyle(.secondary)
+                                // verbatim: si no, el Int se localiza ("24.282").
+                                Text(verbatim: ":\(sv.port) \(sv.proc)").font(.notchMono(11)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.8)
+                                Text(sv.agent.map { "\($0) · \(tr("mac.running"))" } ?? tr("mac.process")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                Spacer()
+                                Button(tr("mac.open")) { MacPanelReader.openPort(sv.port) }.buttonStyle(NotchGhostButton(size: .small, tint: Color(hex: "2F9E6E")))
+                                Button(tr("mac.stop")) { MacPanelReader.stopPid(sv.pid); refreshHeavy() }.buttonStyle(NotchGhostButton(size: .small))
+                            }
+                            .font(.caption)
+                        }
                     }
                 }
             }
+
             // Limpieza de datos temporales de agentes (solo parados).
             JunkSectionView(store: sessions, junk: junk, folded: $foldJunk)
             Text(tr("mac.self", Int(snap.selfCpu.rounded()), Int(snap.selfMB.rounded())))
