@@ -41,49 +41,41 @@ final class SettingsWindowController: NSObject {
     }
 }
 
-/// Páginas del sidebar.
+/// Páginas del sidebar:7 apartados temáticos (antes12, con varias
+/// páginas de una sola tarjeta). Orden: lo esencial → lo visible →
+/// lo que hace → lo que avisa → lo que se conecta → lo que guarda.
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case home, news, appearance, tabs, behavior, music, clipboard, connections, data, language, about, terms
+    case general, appearance, behavior, alerts, connections, data, news
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .home: return "house.fill"
-        case .news: return "newspaper.fill"
-        case .terms: return "doc.text.fill"
+        case .general: return "house.fill"
         case .appearance: return "paintpalette.fill"
-        case .tabs: return "menubar.rectangle"
         case .behavior: return "cursorarrow.click.2"
-        case .music: return "music.note"
-        case .clipboard: return "clipboard.fill"
+        case .alerts: return "bell.fill"
         case .connections: return "link"
         case .data: return "externaldrive.fill"
-        case .language: return "globe"
-        case .about: return "lock.fill"
+        case .news: return "newspaper.fill"
         }
     }
 
     var titleKey: String {
         switch self {
-        case .home: return "set.home"
-        case .news: return "set.news"
-        case .terms: return "set.terms"
-        case .appearance: return "set.color"
-        case .tabs: return "set.navbar"
+        case .general: return "set.general"
+        case .appearance: return "set.appearance"
         case .behavior: return "set.behavior"
-        case .music: return "set.music"
-        case .clipboard: return "set.clipboard"
+        case .alerts: return "set.alerts"
         case .connections: return "set.connections"
         case .data: return "set.data"
-        case .language: return "set.language"
-        case .about: return "set.privacy"
+        case .news: return "set.news"
         }
     }
 }
 
 struct SettingsModalView: View {
     @ObservedObject var settings = NotchSettings.shared
-    @State private var page: SettingsPage = .appearance
+    @State private var page: SettingsPage = .general
     @State private var hoveredPage: SettingsPage? = nil
     @State private var hoverClose = false
     @State private var hoverOpen = UserDefaults.standard.object(forKey: "notchHoverOpen") as? Bool ?? true
@@ -163,13 +155,6 @@ struct SettingsModalView: View {
                             .font(.system(size: 12, weight: sel ? .semibold : .regular))
                             .foregroundStyle(sel ? .white : Color.white.opacity(0.7))
                         Spacer()
-                        if p == .tabs {
-                            Text("\(settings.visibleOrder.count)")
-                                .font(.notchMono(9))
-                                .foregroundStyle(Color.white.opacity(0.55))
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Capsule().fill(Color.white.opacity(0.1)))
-                        }
                     }
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(
@@ -249,18 +234,13 @@ struct SettingsModalView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     switch page {
-                    case .home: homePage
-                    case .news: newsPage
-                    case .terms: termsPage
+                    case .general: generalPage
                     case .appearance: appearancePage
-                    case .tabs: tabsPage
                     case .behavior: behaviorPage
-                    case .music: musicPage
-                    case .clipboard: clipboardPage
+                    case .alerts: alertsPage
                     case .connections: connectionsPage
                     case .data: dataPage
-                    case .language: languagePage
-                    case .about: aboutPage
+                    case .news: newsPage
                     }
                 }
                 .padding(.horizontal, 20)
@@ -272,10 +252,25 @@ struct SettingsModalView: View {
 
     private var pageSubtitle: String {
         switch page {
-        case .tabs: return "\(settings.visibleOrder.count) / \(settings.tabOrder.count)"
-        case .language: return tr("set.languageSub")
-        case .about: return tr("set.local")
+        case .general: return NotchNews.version
         default: return tr("set.subtitle")
+        }
+    }
+
+    // MARK: - General
+
+    /// Lo esencial junto: marca y enlaces, idioma, música y arranque.
+    private var generalPage: some View {
+        VStack(spacing: 12) {
+            homePage
+            languagePage
+            musicPage
+            SettingsCard(label: tr("set.startup"), icon: "power", accent: settings.accent) {
+                IconToggleRow(icon: "power", label: tr("set.login"), subtitle: tr("set.loginSub"), isOn: $launchLogin, accent: settings.accent) {
+                    LaunchAtLogin.set(launchLogin)
+                    launchLogin = LaunchAtLogin.isEnabled()
+                }
+            }
         }
     }
 
@@ -362,6 +357,7 @@ struct SettingsModalView: View {
                         .overlay(Text("abc").font(.notchMono(8)).foregroundStyle(.white.opacity(0.8)))
                 }
             }
+            tabsPage
         }
     }
 
@@ -433,11 +429,6 @@ struct SettingsModalView: View {
                     IconToggleRow(icon: "cursorarrow.motionlines", label: tr("set.hover"), subtitle: tr("set.hoverSub"), isOn: $hoverOpen, accent: settings.accent) {
                         UserDefaults.standard.set(hoverOpen, forKey: "notchHoverOpen")
                     }
-                    Divider().background(Color.white.opacity(0.07))
-                    IconToggleRow(icon: "power", label: tr("set.login"), subtitle: tr("set.loginSub"), isOn: $launchLogin, accent: settings.accent) {
-                        LaunchAtLogin.set(launchLogin)
-                        launchLogin = LaunchAtLogin.isEnabled()
-                    }
                 }
             }
             SettingsCard(label: tr("set.autosend"), icon: "paperplane.fill", accent: settings.accent) {
@@ -457,6 +448,26 @@ struct SettingsModalView: View {
                     }
                 }
             }
+            clipboardPage
+            SettingsCard(label: tr("set.vault"), icon: "folder.fill", accent: settings.accent) {
+                NotchTextField(
+                    placeholder: tr("set.vaultPh"), text: $vaultPath,
+                    icon: "folder", color: settings.accent, font: .callout,
+                    onCommit: {
+                        UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
+                    }
+                )
+            }
+        }
+    }
+
+    // MARK: - Avisos
+
+    /// Todo el ruido en un solo sitio: qué se avisa, cuánto dura y
+    /// hacia fuera (Telegram/WhatsApp). Antes repartido entre
+    /// Comportamiento y Conexiones.
+    private var alertsPage: some View {
+        VStack(spacing: 12) {
             // Apartado: qué avisos (sin duraciones mezcladas).
             SettingsCard(label: tr("set.alerts"), icon: "bell.fill", accent: settings.accent) {
                 VStack(spacing: 2) {
@@ -479,14 +490,68 @@ struct SettingsModalView: View {
                     DurationRow(label: tr("set.durWait"), value: $settings.waitToastSeconds, range: 3...15, accent: settings.accent)
                 }
             }
-            SettingsCard(label: tr("set.vault"), icon: "folder.fill", accent: settings.accent) {
-                NotchTextField(
-                    placeholder: tr("set.vaultPh"), text: $vaultPath,
-                    icon: "folder", color: settings.accent, font: .callout,
-                    onCommit: {
-                        UserDefaults.standard.set(vaultPath, forKey: "notchObsidianVault")
+            // Notificaciones externas: Telegram (envía) y WhatsApp (abre).
+            SettingsCard(label: tr("set.notifExt"), icon: "paperplane.fill", accent: settings.accent) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 6) {
+                        NotchTextField(
+                            placeholder: tr("set.tgToken"), text: $tgToken,
+                            icon: "key.fill", color: settings.accent, font: .caption,
+                            onCommit: { ExternalNotify.shared.setToken(tgToken) })
+                        NotchTextField(
+                            placeholder: tr("set.tgChat"), text: $tgChat,
+                            icon: "number", color: settings.accent, font: .caption,
+                            onCommit: { ExternalNotify.shared.tgChatId = tgChat })
                     }
-                )
+                    HStack(spacing: 8) {
+                        Button(tr("set.tgTest")) { testTelegram() }
+                            .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
+                        if !tgStatus.isEmpty {
+                            HStack(spacing: 4) {
+                                Circle().fill(tgOk ? Color.green : Color(hex: "E0574B"))
+                                    .frame(width: 6, height: 6)
+                                Text(tgStatus).font(.notchMono(10)).foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        Toggle("", isOn: Binding(get: { ExternalNotify.shared.tgEnabled },
+                                                 set: { ExternalNotify.shared.tgEnabled = $0 }))
+                            .toggleStyle(NotchToggleStyle(color: settings.accent, mini: true))
+                            .labelsHidden()
+                    }
+                    Divider().background(Color.white.opacity(0.07))
+                    // Qué eventos salen por Telegram.
+                    IconToggleRow(icon: "checkmark.circle.fill", label: tr("set.agentToast"),
+                                  isOn: Binding(get: { ExternalNotify.shared.tgEvtDone },
+                                                set: { ExternalNotify.shared.tgEvtDone = $0 }),
+                                  accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    IconToggleRow(icon: "hand.raised.fill", label: tr("set.waitToast"),
+                                  isOn: Binding(get: { ExternalNotify.shared.tgEvtWaiting },
+                                                set: { ExternalNotify.shared.tgEvtWaiting = $0 }),
+                                  accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    IconToggleRow(icon: "bell.badge.fill", label: tr("set.reminders"),
+                                  isOn: Binding(get: { ExternalNotify.shared.tgEvtReminder },
+                                                set: { ExternalNotify.shared.tgEvtReminder = $0 }),
+                                  accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    // WhatsApp: sin API personal, solo abre el chat.
+                    IconToggleRow(icon: "bubble.left.fill", label: tr("set.waOpen"),
+                                  subtitle: tr("set.waOpenSub"),
+                                  isOn: $waOpen, accent: settings.accent) {
+                        ExternalNotify.shared.waOpenDone = waOpen
+                    }
+                    HStack(spacing: 6) {
+                        Button(tr("set.waTest")) { ExternalNotify.shared.openWhatsApp(tr("set.testMsg")) }
+                            .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
+                        Spacer()
+                    }
+                    Text(tr("set.notifHint"))
+                        .font(.caption2)
+                        .foregroundStyle(Color.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -619,69 +684,6 @@ struct SettingsModalView: View {
                     }
                 }
             }
-            // Notificaciones externas: Telegram (envía) y WhatsApp (abre).
-            SettingsCard(label: tr("set.notifExt"), icon: "paperplane.fill", accent: settings.accent) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 6) {
-                        NotchTextField(
-                            placeholder: tr("set.tgToken"), text: $tgToken,
-                            icon: "key.fill", color: settings.accent, font: .caption,
-                            onCommit: { ExternalNotify.shared.setToken(tgToken) })
-                        NotchTextField(
-                            placeholder: tr("set.tgChat"), text: $tgChat,
-                            icon: "number", color: settings.accent, font: .caption,
-                            onCommit: { ExternalNotify.shared.tgChatId = tgChat })
-                    }
-                    HStack(spacing: 8) {
-                        Button(tr("set.tgTest")) { testTelegram() }
-                            .buttonStyle(NotchPrimaryButton(size: .small, color: settings.accent))
-                        if !tgStatus.isEmpty {
-                            HStack(spacing: 4) {
-                                Circle().fill(tgOk ? Color.green : Color(hex: "E0574B"))
-                                    .frame(width: 6, height: 6)
-                                Text(tgStatus).font(.notchMono(10)).foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        Toggle("", isOn: Binding(get: { ExternalNotify.shared.tgEnabled },
-                                                 set: { ExternalNotify.shared.tgEnabled = $0 }))
-                            .toggleStyle(NotchToggleStyle(color: settings.accent, mini: true))
-                            .labelsHidden()
-                    }
-                    Divider().background(Color.white.opacity(0.07))
-                    // Qué eventos salen por Telegram.
-                    IconToggleRow(icon: "checkmark.circle.fill", label: tr("set.agentToast"),
-                                  isOn: Binding(get: { ExternalNotify.shared.tgEvtDone },
-                                                set: { ExternalNotify.shared.tgEvtDone = $0 }),
-                                  accent: settings.accent) {}
-                    Divider().background(Color.white.opacity(0.07))
-                    IconToggleRow(icon: "hand.raised.fill", label: tr("set.waitToast"),
-                                  isOn: Binding(get: { ExternalNotify.shared.tgEvtWaiting },
-                                                set: { ExternalNotify.shared.tgEvtWaiting = $0 }),
-                                  accent: settings.accent) {}
-                    Divider().background(Color.white.opacity(0.07))
-                    IconToggleRow(icon: "bell.badge.fill", label: tr("set.reminders"),
-                                  isOn: Binding(get: { ExternalNotify.shared.tgEvtReminder },
-                                                set: { ExternalNotify.shared.tgEvtReminder = $0 }),
-                                  accent: settings.accent) {}
-                    Divider().background(Color.white.opacity(0.07))
-                    // WhatsApp: sin API personal, solo abre el chat.
-                    IconToggleRow(icon: "bubble.left.fill", label: tr("set.waOpen"),
-                                  subtitle: tr("set.waOpenSub"),
-                                  isOn: $waOpen, accent: settings.accent) {
-                        ExternalNotify.shared.waOpenDone = waOpen
-                    }
-                    HStack(spacing: 6) {
-                        Button(tr("set.waTest")) { ExternalNotify.shared.openWhatsApp(tr("set.testMsg")) }
-                            .buttonStyle(NotchGhostButton(size: .small, tint: settings.accent))
-                        Spacer()
-                    }
-                    Text(tr("set.notifHint"))
-                        .font(.caption2)
-                        .foregroundStyle(Color.white.opacity(0.5))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
         }
         .onAppear {
             CalService.shared.refreshStatus()
@@ -734,6 +736,9 @@ struct SettingsModalView: View {
                 Text(dataSummary)
                     .font(.notchMono(9)).foregroundStyle(Color.white.opacity(0.4))
             }
+            // Texto legal junto a los datos (antes, dos páginas sueltas).
+            aboutPage
+            termsPage
         }
     }
 
@@ -831,8 +836,8 @@ struct SettingsModalView: View {
                                "note.text", "cloud.sun", "timer", "lock.shield"]
 
     private var homePage: some View {
-        VStack(spacing: 16) {
-            SettingsCard(label: tr("set.home"), icon: "house.fill", accent: settings.accent) {
+        VStack(spacing: 12) {
+            SettingsCard(label: "NOTCH", icon: "house.fill", accent: settings.accent) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         ZStack {
