@@ -349,10 +349,18 @@ struct SettingsModalView: View {
                         }
                     }
                     Spacer()
-                    // Barra que simula el fondo del panel.
+                    // Barra que simula el fondo del panel (mismo
+                    // material: base de vidrio + negro a todo cubre).
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.black.opacity(settings.panelOpacity))
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        .fill(Color.white.opacity(0.45))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.black.opacity(settings.panelOpacity))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
                         .frame(width: 90, height: 18)
                         .overlay(Text("abc").font(.notchMono(8)).foregroundStyle(.white.opacity(0.8)))
                 }

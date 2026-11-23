@@ -267,13 +267,19 @@ struct NotchRootView: View {
         )
         return ZStack {
             shape.fill(.ultraThinMaterial)
+            // Base de vidrio clara + negro A TODO CUBRE: detrás del
+            // panel hay barra de menús y notch (casi negros), así
+            // que con el degradado viejo (stop blanco arriba) el
+            // slider de opacidad apenas se notaba. La base da
+            // rango real: a0.55 el panel es vidrio claro y a0.95,
+            // sólido (el velo de Liquid Glass resta ~34 fijos, por
+            // eso la base tiene que ser generosa).
+            shape.fill(Color.white.opacity(0.45))
+            shape.fill(Color.black.opacity(settings.panelOpacity))
+            // Sombra sutil hacia abajo (el +0.06 de antes).
             shape.fill(
                 LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.05),
-                        Color.black.opacity(settings.panelOpacity),
-                        Color.black.opacity(min(0.97, settings.panelOpacity + 0.06))
-                    ],
+                    colors: [.clear, Color.black.opacity(0.06)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
