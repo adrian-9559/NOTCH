@@ -335,6 +335,7 @@ private struct NavBubble: View {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .stroke(settings.accent.opacity(0.5), lineWidth: 1)
             )
+            .liquidGlass(NotchSettings.shared.liquidGlass, radius: 7)
             .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
             .offset(y: 30)
             .transition(.opacity.combined(with: .move(edge: .top)))

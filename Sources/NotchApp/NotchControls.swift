@@ -351,11 +351,20 @@ struct LiquidGlassStyle: ViewModifier {
     var radius: CGFloat = 13
     /// El panel cuelga del notch: esquinas superiores rectas.
     var topFlat = false
+    /// Radios personalizados (topLeading, bottomLeading, bottomTrailing,
+    /// topTrailing) para superficies irregulares (la ventana de Ajustes).
+    var radii: (CGFloat, CGFloat, CGFloat, CGFloat)?
 
     func body(content: Content) -> some View {
         content.overlay {
             if on {
-                if topFlat {
+                if let r = radii {
+                    GlassLayers(shape: UnevenRoundedRectangle(
+                        cornerRadii: .init(topLeading: r.0, bottomLeading: r.1,
+                                           bottomTrailing: r.2, topTrailing: r.3),
+                        style: .continuous
+                    ))
+                } else if topFlat {
                     GlassLayers(shape: UnevenRoundedRectangle(
                         cornerRadii: .init(topLeading: 0, bottomLeading: radius,
                                            bottomTrailing: radius, topTrailing: 0),
@@ -371,8 +380,9 @@ struct LiquidGlassStyle: ViewModifier {
 
 extension View {
     /// Activa el brillo Liquid Glass (Apariencia → Liquid Glass).
-    func liquidGlass(_ on: Bool, radius: CGFloat = 13, topFlat: Bool = false) -> some View {
-        modifier(LiquidGlassStyle(on: on, radius: radius, topFlat: topFlat))
+    func liquidGlass(_ on: Bool, radius: CGFloat = 13, topFlat: Bool = false,
+                     radii: (CGFloat, CGFloat, CGFloat, CGFloat)? = nil) -> some View {
+        modifier(LiquidGlassStyle(on: on, radius: radius, topFlat: topFlat, radii: radii))
     }
 }
 

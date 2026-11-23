@@ -98,7 +98,7 @@ struct SettingsModalView: View {
             content
         }
         .frame(width: 700, height: 560)
-        .background(SettingsCardBackground())
+        .background(SettingsCardBackground(liquid: settings.liquidGlass))
         .onAppear {
             launchLogin = LaunchAtLogin.isEnabled()
             refreshStorageSize()
@@ -1236,6 +1236,10 @@ private struct SourceCard: View {
 }
 
 private struct SettingsCardBackground: View {
+    /// Sin esta propiedad SwiftUI considera la vista «igual» y no
+    /// vuelve a evaluar el body al cambiar el interruptor.
+    var liquid: Bool = false
+
     var body: some View {
         ZStack {
             UnevenRoundedRectangle(
@@ -1256,6 +1260,7 @@ private struct SettingsCardBackground: View {
             )
             .stroke(Color.white.opacity(0.1), lineWidth: 1)
         )
+        .liquidGlass(liquid, radii: (12, 18, 18, 12))
         .ignoresSafeArea()
     }
 }

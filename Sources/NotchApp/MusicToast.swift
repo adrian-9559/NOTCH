@@ -107,6 +107,7 @@ struct MusicToastView: View {
         .padding(.horizontal, 12)
         .frame(width: 340, height: 64)
         .background(toastGlass)
+        .liquidGlass(NotchSettings.shared.liquidGlass, radius: 18)
     }
 
     private var toastGlass: some View {

@@ -10,6 +10,8 @@ import SwiftUI
 /// Clic abre el panel. Se reconstruye al cambiar las pantallas.
 struct NotchLightsView: View {
     @ObservedObject private var music = NotchContext.shared.music
+    /// Para re-renderizar al cambiar Liquid Glass en Ajustes.
+    @ObservedObject private var settings = NotchSettings.shared
     var onTap: () -> Void = {}
 
     /// Firma para animar la aparición y el progreso.
@@ -76,6 +78,7 @@ struct NotchLightsView: View {
             .padding(.horizontal, 10)
             .frame(width: 300, height: 40)
             .background(pillGlass)
+            .liquidGlass(settings.liquidGlass, radius: 16, topFlat: true)
             .opacity(music.playing ? 1 : 0.8)
             Spacer(minLength: 0)
         }
@@ -314,6 +317,7 @@ struct NotchWeatherStripView: View {
         .padding(.horizontal, 10)
         .frame(width: 300, height: 40)
         .background(stripGlass)
+        .liquidGlass(NotchSettings.shared.liquidGlass, radius: 16, topFlat: true)
         // Sin datos aún: invisible (el fundido del panel ya lo oculta).
         .opacity(w.temp == nil ? 0 : 1)
         .animation(.easeInOut(duration: 0.35), value: w.temp == nil)
