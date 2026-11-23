@@ -11,6 +11,10 @@ import SwiftUI
 struct NotchLightsView: View {
     @ObservedObject private var music = NotchContext.shared.music
     var onTap: () -> Void = {}
+    /// Distancia desde el borde superior hasta el contenido: el corte
+    /// FÍSICO del notch (p. ej.37.5 pt) no tiene píxeles, así que la
+    /// fila (carátula/tiempo/EQ) cuelga por debajo de él.
+    var topInset: CGFloat = 41.5
 
     /// Firma para animar la aparición y el progreso.
     private var musicSig: String { "\(music.title)|\(music.playing)|\(music.artwork != nil)|\(music.playerLive)" }
@@ -74,7 +78,10 @@ struct NotchLightsView: View {
                 }
             }
             .padding(.horizontal, 10)
-            .frame(width: 300, height: 40)
+            .padding(.top, topInset)
+            // La fila vive por debajo del notch: allí sí hay píxeles
+            // en toda la anchura (el centro superior no los tiene).
+            .frame(width: 300, height: topInset + 32, alignment: .top)
             .background(pillGlass)
             .opacity(music.playing ? 1 : 0.8)
             Spacer(minLength: 0)
@@ -135,15 +142,18 @@ final class NotchLightsController {
         weatherPanels = []
         for entry in notches where entry.layout.hasNotch {
             let n = entry.layout.notchRect
-            // Misma forma y sitio para píldora y tira: la tira de
-            // clima ocupa el rectángulo EXACTO de la píldora (300×40
-            // pegada arriba), así el icono queda donde la carátula y
-            // la temperatura donde la reproducción.
-            let w: CGFloat = 300, h: CGFloat = 40
+            // Misma forma y sitio para píldora y tira, colgando por
+            // DEBAJO del notch: el corte físico (n.height, p. ej.
+            //37.5 pt en el centro superior) no tiene píxeles, así que
+            // la fila de contenido (icono/tiempo/temperatura) empieza
+            // tras él — antes el centro quedaba bajo el agujero y solo
+            // se veían las esquinas (nube + °C sin temperatura).
+            let topInset = n.height + 4
+            let w: CGFloat = 300, h: CGFloat = topInset + 32
             let frame = NSRect(x: n.midX - w / 2, y: n.maxY - h, width: w, height: h)
-            weatherPanels.append(makeStripPanel(frame: frame))
-            fputs("NOTCH-LIGHTS notch=\(n) pill=\(frame)\n", stderr)
-            panels.append(makePanel(frame: frame, onTap: onTap))
+            weatherPanels.append(makeStripPanel(frame: frame, topInset: topInset))
+            fputs("NOTCH-LIGHTS notch=\(n) pill=\(frame) inset=\(topInset)\n", stderr)
+            panels.append(makePanel(frame: frame, topInset: topInset, onTap: onTap))
         }
         cancellables.removeAll()
         // El parte puede llegar DESPUÉS (red): al entrar la temperatura,
@@ -235,7 +245,8 @@ final class NotchLightsController {
         return (hasSong ? panels : weatherPanels).map { $0.frame }
     }
 
-    private func makePanel(frame: NSRect, onTap: @escaping () -> Void) -> NSPanel {
+    private func makePanel(frame: NSRect, topInset: CGFloat,
+                           onTap: @escaping () -> Void) -> NSPanel {
         let p = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -250,12 +261,13 @@ final class NotchLightsController {
         p.hidesOnDeactivate = false
         p.alphaValue = 0
         p.ignoresMouseEvents = false
-        p.contentView = FirstMouseHostingView(rootView: NotchLightsView(onTap: onTap))
+        p.contentView = FirstMouseHostingView(
+            rootView: NotchLightsView(onTap: onTap, topInset: topInset))
         return p
     }
 
     /// Ventana de clima: mismo rectángulo que el notch, solo lectura.
-    private func makeStripPanel(frame: NSRect) -> NSPanel {
+    private func makeStripPanel(frame: NSRect, topInset: CGFloat) -> NSPanel {
         let p = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -271,7 +283,7 @@ final class NotchLightsController {
         p.alphaValue = 0
         // Solo lectura: no intercepta clics de la barra de menús.
         p.ignoresMouseEvents = true
-        p.contentView = NSHostingView(rootView: NotchWeatherStripView())
+        p.contentView = NSHostingView(rootView: NotchWeatherStripView(topInset: topInset))
         return p
     }
 }
@@ -282,6 +294,9 @@ final class NotchLightsController {
 struct NotchWeatherStripView: View {
     @ObservedObject private var w = WeatherStore.shared
     @ObservedObject private var settings = NotchSettings.shared
+    /// Igual que la píldora: el contenido cuelga por debajo del
+    /// corte físico del notch (donde sí hay píxeles).
+    var topInset: CGFloat = 41.5
 
     var body: some View {
         HStack(spacing: 8) {
@@ -317,7 +332,8 @@ struct NotchWeatherStripView: View {
                 .foregroundStyle(Color.white.opacity(0.55))
         }
         .padding(.horizontal, 10)
-        .frame(width: 300, height: 40)
+        .padding(.top, topInset)
+        .frame(width: 300, height: topInset + 32, alignment: .top)
         .background(stripGlass)
         // Sin datos aún: invisible (el fundido del panel ya lo oculta).
         .opacity(w.temp == nil ? 0 : 1)
