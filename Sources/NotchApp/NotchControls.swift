@@ -307,41 +307,80 @@ struct NotchCard<Content: View>: View {
 
 // MARK: - Liquid Glass
 
-/// Capas de brillo «Liquid Glass» al estilo de Apple. Las APIs
-/// reales (.glassEffect) son de macOS26: aquí se emulan con luz de
-/// estudio diagonal, un menisco de luz en el filo superior y un
-/// borde de cristal más luminoso. Se aplica desde Apariencia.
+/// Capas de brillo «Liquid Glass» con DISTORSIÓN simulada: la luz
+/// del filo se retuerce en onda viva (como vidrio líquido) y el
+/// borde dispersa en prisma (franjas roja/cian desplazadas).
+///
+/// Honesty: la refracción REAL del fondo (torcer lo que hay detrás)
+/// exige .glassEffect de macOS26 o capturar el escritorio, y eso
+/// último sería Grabación de pantalla (no usada en NOTCH). Aquí la
+/// distorsión se simula sobre nuestras capas, y la translucidez del
+/// fondo es de verdad: el material (blur del escritorio) se ve
+/// moverse detrás del vidrio.
 private struct GlassLayers<S: Shape>: View {
     var shape: S
 
     var body: some View {
-        // Luz de estudio: brillo diagonal sobre el vidrio.
-        shape.fill(
-            LinearGradient(
-                colors: [Color.white.opacity(0.13), .clear, Color.white.opacity(0.05)],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-        )
-        // Menisco: filo superior de luz, como el cristal de Apple.
-        shape.fill(
-            LinearGradient(
-                stops: [
-                    .init(color: .white.opacity(0.24), location: 0),
-                    .init(color: .white.opacity(0.06), location: 0.07),
-                    .init(color: .clear, location: 0.22),
-                ],
-                startPoint: .top, endPoint: .bottom
-            )
-        )
-        // Filo de cristal: borde superior más marcado.
-        shape.stroke(
-            LinearGradient(
-                colors: [Color.white.opacity(0.38), Color.white.opacity(0.10)],
-                startPoint: .top, endPoint: .bottom
-            ),
-            lineWidth: 1
-        )
-        .allowsHitTesting(false)
+        TimelineView(.animation(minimumInterval: 1.0 / 10.0)) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            ZStack {
+                //1) Luz de estudio diagonal (brillo base).
+                shape.fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.13), .clear, Color.white.opacity(0.05)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                )
+                //2) Menisco con ONDA VIVA: la banda de luz del filo
+                //    se ondula en bucle (dos ecos en fase opuesta),
+                //    recortada a la forma del vidrio.
+                Canvas { ctx, size in
+                    let rect = CGRect(origin: .zero, size: size)
+                    ctx.clip(to: shape.path(in: rect))
+                    for (phase, alpha) in [(0.0, 0.28), (Double.pi, 0.13)] {
+                        var wave = Path()
+                        wave.move(to: CGPoint(x: 0, y: 0))
+                        let steps = 44
+                        for i in 0...steps {
+                            let x = size.width * CGFloat(i) / CGFloat(steps)
+                            let y = CGFloat(5) + CGFloat(sin(Double(x) * 0.05 + t * 1.7 + phase)) * 2.4
+                            wave.addLine(to: CGPoint(x: x, y: max(0, y)))
+                        }
+                        wave.addLine(to: CGPoint(x: size.width, y: 0))
+                        wave.closeSubpath()
+                        ctx.fill(
+                            wave,
+                            with: .linearGradient(
+                                Gradient(colors: [Color.white.opacity(alpha),
+                                                  Color.white.opacity(alpha * 0.25),
+                                                  .clear]),
+                                startPoint: .zero,
+                                endPoint: CGPoint(x: 0, y: 15)
+                            )
+                        )
+                    }
+                }
+                //3) PRISMA: el filo dispersa la luz en franjas
+                //    cromáticas desplazadas (roja abajo-dcha, cian
+                //    arriba-izda) + el filo blanco marcado.
+                ZStack {
+                    shape.stroke(Color.red.opacity(0.14), lineWidth: 1)
+                        .offset(x: 0.8, y: 0.8)
+                    shape.stroke(Color.cyan.opacity(0.16), lineWidth: 1)
+                        .offset(x: -0.8, y: -0.8)
+                    shape.stroke(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.38), Color.white.opacity(0.10)],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+                }
+                .clipShape(shape)
+            }
+            .clipShape(shape)
+            .allowsHitTesting(false)
+        }
     }
 }
 

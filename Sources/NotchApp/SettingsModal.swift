@@ -1261,7 +1261,9 @@ private struct SettingsCardBackground: View {
                 cornerRadii: .init(topLeading: 12, bottomLeading: 18, bottomTrailing: 18, topTrailing: 12),
                 style: .continuous
             )
-            .fill(Color.black.opacity(0.84))
+            // Modo Liquid Glass: fondo translúcido (se ve el blur
+            // del escritorio a través del vidrio).
+            .fill(Color.black.opacity(liquid ? 0.5 : 0.84))
         }
         .overlay(
             UnevenRoundedRectangle(

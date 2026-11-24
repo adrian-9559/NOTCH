@@ -274,8 +274,13 @@ struct NotchRootView: View {
             // rango real: a0.55 el panel es vidrio claro y a0.95,
             // sólido (el velo de Liquid Glass resta ~34 fijos, por
             // eso la base tiene que ser generosa).
-            shape.fill(Color.white.opacity(0.45))
-            shape.fill(Color.black.opacity(settings.panelOpacity))
+            // MODO LIQUID GLASS: el negro afloja (×0.6) y la base
+            // clara casi desaparece → el vidrio queda TRANSLÚCIDO y
+            // se ve el material (blur del escritorio) moverse detrás.
+            shape.fill(Color.white.opacity(settings.liquidGlass ? 0.15 : 0.45))
+            shape.fill(Color.black.opacity(settings.liquidGlass
+                ? settings.panelOpacity * 0.6
+                : settings.panelOpacity))
             // Sombra sutil hacia abajo (el +0.06 de antes).
             shape.fill(
                 LinearGradient(
