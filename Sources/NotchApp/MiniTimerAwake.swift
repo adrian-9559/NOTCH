@@ -13,6 +13,12 @@ final class FocusTimerStore: ObservableObject {
     @Published var stopwatch = false
     @Published var eyeRest = true
     @Published var finishedMessage = ""
+    /// Modo Pomodoro: foco25 → descanso5 en cadena, con ciclos del día.
+    @Published var pomodoro = false
+    @Published var phase = "focus" // focus | break
+    @Published var cyclesToday = 0
+    static let pomoFocusMinutes = 25
+    static let pomoBreakMinutes = 5
     private var timer: Timer?
 
     func start() {
@@ -36,6 +42,23 @@ final class FocusTimerStore: ObservableObject {
         } else {
             remaining -= 1
             if remaining <= 0 {
+                // Pomodoro: la cadena foco→descanso→foco no se para;
+                // solo se acumulan los ciclos de foco del día.
+                if pomodoro {
+                    NSSound.beep()
+                    if phase == "focus" {
+                        incrementCycle()
+                        phase = "break"
+                        minutes = Self.pomoBreakMinutes
+                        finishedMessage = tr("focus.pomoBreak")
+                    } else {
+                        phase = "focus"
+                        minutes = Self.pomoFocusMinutes
+                        finishedMessage = tr("focus.pomoRound")
+                    }
+                    remaining = TimeInterval(minutes * 60)
+                    return
+                }
                 stop()
                 if eyeRest {
                     finishedMessage = tr("focus.rest")
@@ -45,6 +68,41 @@ final class FocusTimerStore: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Activa/desactiva Pomodoro (reinicia al foco de25).
+    func setPomodoro(_ on: Bool) {
+        stop()
+        pomodoro = on
+        phase = "focus"
+        finishedMessage = ""
+        if on {
+            minutes = Self.pomoFocusMinutes
+            loadCycles()
+        }
+    }
+
+    /// Ciclos de foco de HOY (persistidos por fecha).
+    func loadCycles() {
+        let d = UserDefaults.standard
+        cyclesToday = d.string(forKey: "notchPomoDay") == Self.todayKey
+            ? d.integer(forKey: "notchPomoCount") : 0
+    }
+
+    private func incrementCycle() {
+        let d = UserDefaults.standard
+        if d.string(forKey: "notchPomoDay") != Self.todayKey {
+            d.set(Self.todayKey, forKey: "notchPomoDay")
+            d.set(0, forKey: "notchPomoCount")
+        }
+        cyclesToday = d.integer(forKey: "notchPomoCount") + 1
+        d.set(cyclesToday, forKey: "notchPomoCount")
+    }
+
+    private static var todayKey: String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
     }
 
     func pause() {
@@ -168,6 +226,32 @@ struct TimerView: View {
                 }
                 NotchStepper(label: tr("focus.minutes", store.minutes), value: $store.minutes, range: 1...180, step: 1, color: timerGreen)
                     .disabled(store.running)
+
+                // Pomodoro: foco/descanso en cadena + ciclos de hoy.
+                HStack(spacing: 6) {
+                    if store.pomodoro {
+                        Button {
+                            store.setPomodoro(false)
+                        } label: {
+                            Label(tr("focus.pomo"), systemImage: "timer")
+                        }
+                        .buttonStyle(NotchPrimaryButton(size: .small, color: timerGreen))
+                        Text(store.phase == "break" ? tr("focus.pomoBreak") : tr("focus.pomoFocus"))
+                            .font(.notchMono(10))
+                            .foregroundStyle(timerGreen)
+                        Spacer()
+                        Text(tr("focus.pomoCycles", store.cyclesToday))
+                            .font(.notchMono(10))
+                            .foregroundStyle(Color.white.opacity(0.55))
+                    } else {
+                        Button {
+                            store.setPomodoro(true)
+                        } label: {
+                            Label(tr("focus.pomo"), systemImage: "timer")
+                        }
+                        .buttonStyle(NotchGhostButton(size: .small, tint: timerGreen))
+                    }
+                }
             }
 
             // Controles según estado.
@@ -206,6 +290,7 @@ struct TimerView: View {
             }
         }
         .padding(8)
+        .onAppear { store.loadCycles() }
     }
 }
 

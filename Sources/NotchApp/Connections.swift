@@ -22,6 +22,8 @@ struct CalEvent: Identifiable {
     var start: Date
     var end: Date
     var isAllDay: Bool
+    /// URL del evento (Zoom/Meet/Teams) si la trae.
+    var url: URL? = nil
 }
 
 final class CalService: ObservableObject {
@@ -86,9 +88,21 @@ final class CalService: ObservableObject {
         return out
     }
 
-    /// Eventos de un día concreto (para la agenda).
+    /// Eventos de un día concreto (para las puntos de Tareas):
+    /// respeta el interruptor «Eventos en el calendario».
     func events(on day: Date) -> [CalEvent] {
-        guard NotchSettings.shared.useSystemCalendar, auth == .granted,
+        guard NotchSettings.shared.useSystemCalendar else { return [] }
+        return fetchEvents(on: day)
+    }
+
+    /// Eventos SIN el interruptor de Tareas: lo usa la pestaña Agenda
+    /// (solo hace falta el permiso de Calendario).
+    func agendaEvents(on day: Date) -> [CalEvent] {
+        fetchEvents(on: day)
+    }
+
+    private func fetchEvents(on day: Date) -> [CalEvent] {
+        guard auth == .granted,
               let s = ensureStore() else { return [] }
         let cal = Calendar.current
         let start = cal.startOfDay(for: day)
@@ -96,7 +110,7 @@ final class CalService: ObservableObject {
         let pred = s.predicateForEvents(withStart: start, end: end, calendars: nil)
         return s.events(matching: pred)
             .sorted { $0.startDate < $1.startDate }
-            .map { CalEvent(id: $0.eventIdentifier ?? UUID().uuidString, title: $0.title ?? "", start: $0.startDate, end: $0.endDate, isAllDay: $0.isAllDay) }
+            .map { CalEvent(id: $0.eventIdentifier ?? UUID().uuidString, title: $0.title ?? "", start: $0.startDate, end: $0.endDate, isAllDay: $0.isAllDay, url: $0.url) }
     }
 }
 

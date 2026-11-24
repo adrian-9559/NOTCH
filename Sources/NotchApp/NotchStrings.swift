@@ -25,7 +25,7 @@ enum NotchLang: String, CaseIterable {
 
 /// IDs estables de pestaña (lo que se guarda en Ajustes).
 enum NotchTab: String, CaseIterable {
-    case shelf, focus, mac, tiempo, activity, agents, music, notes, tasks
+    case shelf, focus, agenda, mac, tiempo, activity, agents, music, notes, tasks
 
     /// Título visible según el idioma.
     var title: String { tr("tab.\(rawValue)") }
@@ -34,6 +34,7 @@ enum NotchTab: String, CaseIterable {
         switch self {
         case .shelf: return "tray"
         case .focus: return "timer"
+        case .agenda: return "calendar"
         case .mac: return "cpu"
         case .tiempo: return "cloud.sun.fill"
         case .activity: return "chart.bar"
@@ -147,6 +148,14 @@ enum NotchStrings {
             "set.liquid": "liquid glass",
             "set.liquidSub": "Estilo macOS Tahoe: brillos especulares, filos de cristal y luz de estudio en el panel y los ajustes.",
             "set.msgToast": "mensajes en el notch",
+            "tab.agenda": "agenda", "agenda.today": "hoy", "agenda.tomorrow": "mañana",
+            "agenda.empty": "sin eventos", "agenda.allDay": "todo el día",
+            "agenda.join": "unirse", "agenda.now": "en curso",
+            "agenda.in": "en %d min", "agenda.enable": "activar agenda",
+            "agenda.enableSub": "NOTCH lee tus próximos eventos de Calendario (solo local).",
+            "focus.pomo": "pomodoro", "focus.pomoCycles": "ciclos hoy: %d",
+            "focus.pomoFocus": "foco", "focus.pomoBreak": "descanso",
+            "focus.pomoRound": "¡otra ronda!",
             "set.msgToastSub": "píldora al recibir un mensaje de WhatsApp o Telegram (se lee por Accesibilidad)",
             "mac.trashFails": "Papelera con %d fallos",
             "mac.self": "NOTCH itself uses %d%% · %d MB",
@@ -398,6 +407,14 @@ enum NotchStrings {
             "set.liquid": "liquid glass",
             "set.liquidSub": "macOS Tahoe style: specular highlights, glass edges and studio light across the panel and settings.",
             "set.msgToast": "messages in the notch",
+            "tab.agenda": "calendar", "agenda.today": "today", "agenda.tomorrow": "tomorrow",
+            "agenda.empty": "no events", "agenda.allDay": "all day",
+            "agenda.join": "join", "agenda.now": "now",
+            "agenda.in": "in %d min", "agenda.enable": "enable calendar",
+            "agenda.enableSub": "NOTCH reads your upcoming Calendar events (local only).",
+            "focus.pomo": "pomodoro", "focus.pomoCycles": "cycles today: %d",
+            "focus.pomoFocus": "focus", "focus.pomoBreak": "break",
+            "focus.pomoRound": "another round!",
             "set.msgToastSub": "pill when a WhatsApp or Telegram message arrives (read via Accessibility)",
             "mac.trashFails": "Trash with %d failures",
             "mac.self": "NOTCH itself uses %d%% · %d MB",
@@ -645,6 +662,14 @@ enum NotchStrings {
             "set.liquid": "liquid glass",
             "set.liquidSub": "Style macOS Tahoe : reflets spéculaires, bords de cristal et lumière d'atelier dans le panneau et les réglages.",
             "set.msgToast": "messages dans le notch",
+            "tab.agenda": "agenda", "agenda.today": "aujourd'hui", "agenda.tomorrow": "demain",
+            "agenda.empty": "aucun événement", "agenda.allDay": "journée entière",
+            "agenda.join": "rejoindre", "agenda.now": "en cours",
+            "agenda.in": "dans %d min", "agenda.enable": "activer l'agenda",
+            "agenda.enableSub": "NOTCH lit vos prochains événements Calendrier (local uniquement).",
+            "focus.pomo": "pomodoro", "focus.pomoCycles": "cycles aujourd'hui : %d",
+            "focus.pomoFocus": "focus", "focus.pomoBreak": "pause",
+            "focus.pomoRound": "encore un tour !",
             "set.msgToastSub": "pastille à la réception d'un message WhatsApp ou Telegram (lu via Accessibilité)",
             "mac.trashFails": "Corbeille avec %d échecs",
             "mac.self": "NOTCH utilise %d%% · %d Mo",
@@ -846,6 +871,14 @@ enum NotchStrings {
             "set.liquid": "liquid glass",
             "set.liquidSub": "macOS-Tahoe-Stil: spekulaire Glanzlichter, Glasränder und Studiolicht in Panel und Einstellungen.",
             "set.msgToast": "Nachrichten im Notch",
+            "tab.agenda": "Kalender", "agenda.today": "heute", "agenda.tomorrow": "morgen",
+            "agenda.empty": "keine Termine", "agenda.allDay": "ganztägig",
+            "agenda.join": "beitreten", "agenda.now": "läuft",
+            "agenda.in": "in %d Min", "agenda.enable": "Kalender aktivieren",
+            "agenda.enableSub": "NOTCH liest deine nächsten Kalendertermine (nur lokal).",
+            "focus.pomo": "Pomodoro", "focus.pomoCycles": "Zyklen heute: %d",
+            "focus.pomoFocus": "Fokus", "focus.pomoBreak": "Pause",
+            "focus.pomoRound": "Noch eine Runde!",
             "set.msgToastSub": "Pille bei eingehenden WhatsApp-/Telegram-Nachrichten (über Barrierefreiheit gelesen)",
             "mac.trashFails": "Papierkorb mit %d Fehlern",
             "mac.self": "NOTCH selbst: %d%% · %d MB",

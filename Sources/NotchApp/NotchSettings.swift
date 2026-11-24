@@ -10,7 +10,7 @@ final class NotchSettings: ObservableObject {
     static let defaultAccent = "A550A7"
     /// IDs de pestaña que la navbar puede mostrar (orden por defecto).
     /// Son IDs estables: el título visible sale de `NotchTab` (idioma).
-    static let tabTitles = ["shelf", "focus", "mac", "tiempo", "activity", "agents", "music", "notes", "tasks"]
+    static let tabTitles = ["shelf", "focus", "agenda", "mac", "tiempo", "activity", "agents", "music", "notes", "tasks"]
 
     /// Color de acento en hex (#RRGGBB).
     @Published var accentHex: String {
