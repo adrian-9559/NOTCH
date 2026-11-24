@@ -146,7 +146,7 @@ final class NotchSettings: ObservableObject {
         liquidGlass = d.object(forKey: "notchLiquidGlass") as? Bool ?? false
         msgToastEnabled = d.object(forKey: "notchMsgToast") as? Bool ?? true
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
-        fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
+        fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode) liquid=\(liquidGlass) msg=\(msgToastEnabled)\n", stderr)
     }
 
     var accent: Color { Color(hex: accentHex) }

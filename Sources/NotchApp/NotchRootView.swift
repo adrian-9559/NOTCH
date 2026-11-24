@@ -266,7 +266,14 @@ struct NotchRootView: View {
             style: .continuous
         )
         return ZStack {
-            shape.fill(.ultraThinMaterial)
+            // Modo Liquid Glass: vidrio REAL de Apple (macOS26+,
+            // refracta el escritorio de verdad; en14/15, material).
+            // Modo normal: el material de siempre.
+            if settings.liquidGlass {
+                AppleGlassBase(radius: 18, topFlat: true)
+            } else {
+                shape.fill(.ultraThinMaterial)
+            }
             // Base de vidrio clara + negro A TODO CUBRE: detrás del
             // panel hay barra de menús y notch (casi negros), así
             // que con el degradado viejo (stop blanco arriba) el

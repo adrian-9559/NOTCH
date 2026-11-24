@@ -1252,11 +1252,16 @@ private struct SettingsCardBackground: View {
 
     var body: some View {
         ZStack {
-            UnevenRoundedRectangle(
-                cornerRadii: .init(topLeading: 12, bottomLeading: 18, bottomTrailing: 18, topTrailing: 12),
-                style: .continuous
-            )
-            .fill(.ultraThinMaterial)
+            // Modo Liquid Glass: vidrio REAL de Apple (macOS26+).
+            if liquid {
+                AppleGlassBase(radii: (12, 18, 18, 12))
+            } else {
+                UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: 12, bottomLeading: 18,
+                                       bottomTrailing: 18, topTrailing: 12),
+                    style: .continuous
+                ).fill(.ultraThinMaterial)
+            }
             UnevenRoundedRectangle(
                 cornerRadii: .init(topLeading: 12, bottomLeading: 18, bottomTrailing: 18, topTrailing: 12),
                 style: .continuous

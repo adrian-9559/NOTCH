@@ -307,6 +307,88 @@ struct NotchCard<Content: View>: View {
 
 // MARK: - Liquid Glass
 
+/// Fondo de vidrio REAL de Apple: `NSGlassEffectView` (macOS26+)
+/// refracta de verdad lo que hay detrás de la ventana — lo renderiza
+/// el sistema, sin diseño nuestro. En macOS14/15 instala un
+/// NSVisualEffectView equivalente al material de siempre. La máscara
+/// da la forma exacta (esquinas superiores rectas, radios
+/// irregulares…). Solo hace falta en fondos grandes (panel,
+/// Ajustes); las tarjetas usan el modificador .glassEffect.
+struct AppleGlassBase: NSViewRepresentable {
+    var radius: CGFloat = 0
+    /// El panel cuelga del notch: esquinas superiores rectas.
+    var topFlat = false
+    /// (topLeading, bottomLeading, bottomTrailing, topTrailing).
+    var radii: (CGFloat, CGFloat, CGFloat, CGFloat)? = nil
+
+    func makeNSView(context: Context) -> GlassCanvas {
+        let v = GlassCanvas()
+        v.radius = radius
+        v.topFlat = topFlat
+        v.radii = radii
+        v.install()
+        return v
+    }
+
+    func updateNSView(_ v: GlassCanvas, context: Context) {
+        v.radius = radius
+        v.topFlat = topFlat
+        v.radii = radii
+        v.needsLayout = true
+    }
+
+    final class GlassCanvas: NSView {
+        var radius: CGFloat = 0
+        var topFlat = false
+        var radii: (CGFloat, CGFloat, CGFloat, CGFloat)?
+        private var installed = false
+
+        func install() {
+            guard !installed else { return }
+            installed = true
+            let inner: NSView
+            if #available(macOS 26.0, *) {
+                let g = NSGlassEffectView()
+                g.style = .regular
+                g.contentView = nil
+                inner = g
+            } else {
+                let v = NSVisualEffectView()
+                v.material = .hudWindow
+                v.blendingMode = .behindWindow
+                v.state = .active
+                inner = v
+            }
+            inner.frame = bounds
+            inner.autoresizingMask = [.width, .height]
+            addSubview(inner)
+        }
+
+        override func layout() {
+            super.layout()
+            let r = CGRect(origin: .zero, size: bounds.size)
+            guard r.width > 1, r.height > 1 else { return }
+            let p: Path
+            if let q = radii {
+                p = UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: q.0, bottomLeading: q.1,
+                                       bottomTrailing: q.2, topTrailing: q.3),
+                    style: .continuous).path(in: r)
+            } else if topFlat {
+                p = UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: 0, bottomLeading: radius,
+                                       bottomTrailing: radius, topTrailing: 0),
+                    style: .continuous).path(in: r)
+            } else {
+                p = RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: r)
+            }
+            let mask = CAShapeLayer()
+            mask.path = p.cgPath
+            layer?.mask = mask
+        }
+    }
+}
+
 /// Capas de brillo «Liquid Glass» con DISTORSIÓN simulada: la luz
 /// del filo se retuerce en onda viva (como vidrio líquido) y el
 /// borde dispersa en prisma (franjas roja/cian desplazadas).
@@ -384,7 +466,10 @@ private struct GlassLayers<S: Shape>: View {
     }
 }
 
-/// Modificador que añade las capas de cristal si el modo está activo.
+/// Modificador de vidrio. En macOS26+ usa el Liquid Glass REAL de
+/// Apple (`.glassEffect(in:)`: el sistema dibuja brillos y refracta
+/// el fondo — sin nada diseñado por nosotros). En macOS14/15 cae en
+/// nuestra simulación (GlassLayers: onda + prisma).
 struct LiquidGlassStyle: ViewModifier {
     var on: Bool
     var radius: CGFloat = 13
@@ -395,24 +480,47 @@ struct LiquidGlassStyle: ViewModifier {
     var radii: (CGFloat, CGFloat, CGFloat, CGFloat)?
 
     func body(content: Content) -> some View {
-        content.overlay {
-            if on {
+        if on {
+            if #available(macOS 26.0, *) {
+                // Vidrio de Apple: lo renderiza el sistema con
+                // refracción real del fondo (macOS26+).
                 if let r = radii {
-                    GlassLayers(shape: UnevenRoundedRectangle(
+                    content.glassEffect(in: UnevenRoundedRectangle(
                         cornerRadii: .init(topLeading: r.0, bottomLeading: r.1,
                                            bottomTrailing: r.2, topTrailing: r.3),
                         style: .continuous
                     ))
                 } else if topFlat {
-                    GlassLayers(shape: UnevenRoundedRectangle(
+                    content.glassEffect(in: UnevenRoundedRectangle(
                         cornerRadii: .init(topLeading: 0, bottomLeading: radius,
                                            bottomTrailing: radius, topTrailing: 0),
                         style: .continuous
                     ))
                 } else {
-                    GlassLayers(shape: RoundedRectangle(cornerRadius: radius, style: .continuous))
+                    content.glassEffect(in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+                }
+            } else {
+                // Fallback macOS14/15: nuestra simulación.
+                content.overlay {
+                    if let r = radii {
+                        GlassLayers(shape: UnevenRoundedRectangle(
+                            cornerRadii: .init(topLeading: r.0, bottomLeading: r.1,
+                                               bottomTrailing: r.2, topTrailing: r.3),
+                            style: .continuous
+                        ))
+                    } else if topFlat {
+                        GlassLayers(shape: UnevenRoundedRectangle(
+                            cornerRadii: .init(topLeading: 0, bottomLeading: radius,
+                                               bottomTrailing: radius, topTrailing: 0),
+                            style: .continuous
+                        ))
+                    } else {
+                        GlassLayers(shape: RoundedRectangle(cornerRadius: radius, style: .continuous))
+                    }
                 }
             }
+        } else {
+            content
         }
     }
 }
