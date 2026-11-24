@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var waitToast = WaitingToastController()
     /// Píldora de recordatorios + planificador.
     private var reminderToast = ReminderToastController()
+    private var msgToast = MsgToastController()
     private var reminderScheduler = ReminderScheduler()
     private var cancellables = Set<AnyCancellable>()
     private var hover = NotchHoverController()
@@ -159,6 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         agentToast.hide()
         waitToast.hide()
         reminderToast.hide()
+        msgToast.hide()
         lights.setPanelOpen(true)
         windowController?.show(anchorX: notchAnchorX, topY: notchTopY)
     }
@@ -258,7 +260,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     private func pumpAgentToast(_ s: AgentSession, gen: Int, attempt: Int) {
         guard gen == toastQueueGen, attempt < 12 else { return }
-        if toast.state.visible || agentToast.state.visible || waitToast.state.visible || reminderToast.state.visible {
+        if toast.state.visible || agentToast.state.visible || waitToast.state.visible || reminderToast.state.visible || msgToast.state.visible {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 self?.pumpAgentToast(s, gen: gen, attempt: attempt + 1)
             }
@@ -275,7 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     private func pumpWaitToast(_ s: AgentSession, gen: Int, attempt: Int) {
         guard gen == waitQueueGen, attempt < 12 else { return }
-        if toast.state.visible || agentToast.state.visible || waitToast.state.visible || reminderToast.state.visible {
+        if toast.state.visible || agentToast.state.visible || waitToast.state.visible || reminderToast.state.visible || msgToast.state.visible {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 self?.pumpWaitToast(s, gen: gen, attempt: attempt + 1)
             }
@@ -367,6 +369,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             self?.showPanel()
             NotificationCenter.default.post(name: .notchShowTasks, object: nil)
         }
+        // Píldora de mensajes (WhatsApp/Telegram) leídos por AX.
+        msgToast.isPanelVisible = { [weak self] in self?.windowController?.isVisible == true }
+        msgToast.rebuild(notches: notches)
+        msgToast.isBlocked = { [weak self] in
+            self?.toast.state.visible == true
+                || self?.agentToast.state.visible == true
+                || self?.waitToast.state.visible == true
+                || self?.reminderToast.state.visible == true
+        }
+        MsgSniffer.shared.onMessage = { [weak self] app, tint, icon, text in
+            guard NotchSettings.shared.msgToastEnabled else { return }
+            self?.msgToast.show(app: app, tint: tint, icon: icon, text: text)
+        }
+        MsgSniffer.shared.start()
         // Mientras sale el aviso de canción, la píldora se quita y vuelve al irse.
         toast.state.$visible
             .receive(on: DispatchQueue.main)
@@ -377,6 +393,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             self?.agentToast.state.visible == true
                 || self?.waitToast.state.visible == true
                 || self?.reminderToast.state.visible == true
+                || self?.msgToast.state.visible == true
         }
     }
 

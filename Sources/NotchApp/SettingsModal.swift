@@ -494,6 +494,8 @@ struct SettingsModalView: View {
                     IconToggleRow(icon: "hand.raised.fill", label: tr("set.waitToast"), subtitle: tr("set.waitToastSub"), isOn: $settings.waitToastEnabled, accent: settings.accent) {}
                     Divider().background(Color.white.opacity(0.07))
                     IconToggleRow(icon: "bell.badge.fill", label: tr("set.reminders"), subtitle: tr("set.remindersSub"), isOn: $settings.remindersEnabled, accent: settings.accent) {}
+                    Divider().background(Color.white.opacity(0.07))
+                    IconToggleRow(icon: "bubble.left.fill", label: tr("set.msgToast"), subtitle: tr("set.msgToastSub"), isOn: $settings.msgToastEnabled, accent: settings.accent) {}
                 }
             }
             // Apartado: cuánto dura cada aviso.

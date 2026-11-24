@@ -98,6 +98,11 @@ final class NotchSettings: ObservableObject {
     @Published var liquidGlass: Bool {
         didSet { save() }
     }
+    /// Píldora en el notch con los mensajes entrantes (WhatsApp/
+    /// Telegram), leídos por Accesibilidad.
+    @Published var msgToastEnabled: Bool {
+        didSet { save() }
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -139,6 +144,7 @@ final class NotchSettings: ObservableObject {
         let tu = d.string(forKey: "notchTempUnit") ?? "C"
         tempUnit = ["C", "F"].contains(tu) ? tu : "C"
         liquidGlass = d.object(forKey: "notchLiquidGlass") as? Bool ?? false
+        msgToastEnabled = d.object(forKey: "notchMsgToast") as? Bool ?? true
         // Diagnóstico: qué leyó al arrancar (dominio UserDefaults = NotchApp).
         fputs("NOTCH-SETTINGS accent=\(accentHex) opacity=\(panelOpacity) hidden=\(hiddenTabs) order=\(tabOrder) lang=\(langCode)\n", stderr)
     }
@@ -191,6 +197,7 @@ final class NotchSettings: ObservableObject {
         d.set(clipMax, forKey: "notchClipMax")
         d.set(tempUnit, forKey: "notchTempUnit")
         d.set(liquidGlass, forKey: "notchLiquidGlass")
+        d.set(msgToastEnabled, forKey: "notchMsgToast")
     }
 }
 
