@@ -4,6 +4,7 @@ private struct GenericDetector: AgentDetector {
     let agent: AgentID
     let processHints: [String]
     var processExclusions: [String] = []
+    var processBasenames: [String] = []
     let sessionPaths: [String]
 }
 
@@ -14,6 +15,8 @@ public enum AllDetectors {
         [
             GenericDetector(agent: .claudeCode,
                 processHints: ["claude"],
+                // La extensión de Cline se llama "claude-dev": no es Claude.
+                processExclusions: ["saoudrizwan"],
                 sessionPaths: ["~/.claude/sessions", "~/.claude/ide", "~/.claude.json", "~/.claude/settings.json"]),
             GenericDetector(agent: .codex,
                 processHints: ["codex"],
@@ -39,12 +42,13 @@ public enum AllDetectors {
                 sessionPaths: ["~/.kilo", "~/.config/kilo"]),
             GenericDetector(agent: .pi,
                 processHints: [" pi ", "/pi ", "pi-mono", "picode"],
+                processBasenames: ["pi", "picode"],
                 sessionPaths: ["~/.pi"]),
             GenericDetector(agent: .qwenCode,
                 processHints: ["qwen"],
                 sessionPaths: ["~/.qwen"]),
             GenericDetector(agent: .cline,
-                processHints: ["cline"],
+                processHints: ["cline", "saoudrizwan", "claude-dev"],
                 sessionPaths: ["~/.cline", "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev"]),
             GenericDetector(agent: .crush,
                 processHints: ["crush"],

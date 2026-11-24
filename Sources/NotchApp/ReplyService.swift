@@ -93,6 +93,15 @@ final class ReplyService {
         }
     }
 
+    // MARK: - Pegar desde el portapapeles (gestor Win+V)
+
+    /// Copia implícita ya hecha: pega con ⌘V si hay confianza.
+    /// Sin confianza no hace nada (el usuario pega con ⌘V a mano).
+    func pasteFromClipboard() {
+        guard isTrusted else { return }
+        pressCmdV()
+    }
+
     // MARK: - Privado
 
     private func copy(_ text: String) {

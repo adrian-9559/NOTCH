@@ -2,9 +2,19 @@ name: ci
 on: [push, pull_request]
 jobs:
   build:
-    runs-on: macos-14
+    # macos-14 fue retirado por GitHub (2026-11-02): todo job que lo pide
+    # se cancela al instante con "configuration is not supported".
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - uses: swift-actions/setup-swift@v2
+      # El Liquid Glass real (NSGlassEffectView/.glassEffect) necesita
+      # el SDK de macOS26+: sin este paso, el Xcode por defecto del
+      # runner (SDK15) no encuentra los símbolos y el build revienta
+      # (runs155/156). Selecciona el Xcode26 o superior que traiga
+      # la imagen.
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+      - run: swift --version
       - run: swift build -v
       - run: swift test -v
