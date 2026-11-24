@@ -127,24 +127,7 @@ struct NotchSegments<V: Hashable>: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(options, id: \.0) { value, label in
-                let sel = selection == value
-                Button(label) {
-                    withAnimation(.snappy(duration: 0.18)) { selection = value }
-                }
-                .font(.system(size: 11, weight: sel ? .semibold : .regular))
-                .foregroundStyle(sel ? color : Color.white.opacity(0.6))
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .frame(maxWidth: fill ? .infinity : nil)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(sel ? color.opacity(0.2) : Color.clear)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(sel ? color.opacity(0.45) : Color.clear, lineWidth: 1)
-                )
-                .buttonStyle(.plain)
-                .disabled(disabledAll)
+                segment(value, label)
             }
         }
         .padding(3)
@@ -157,6 +140,30 @@ struct NotchSegments<V: Hashable>: View {
                 .stroke(Color.white.opacity(0.09), lineWidth: 1)
         )
         .opacity(disabledAll ? 0.55 : 1)
+    }
+
+    /// Un segmento. Vive fuera del body: el type-checker de CI (CI
+    /// con Xcode26) se ahogaba con la cadena completa anidada en el
+    /// ForEach genérico («unable to type-check in reasonable time»).
+    private func segment(_ value: V, _ label: String) -> some View {
+        let sel = selection == value
+        return Button(label) {
+            withAnimation(.snappy(duration: 0.18)) { selection = value }
+        }
+        .font(.system(size: 11, weight: sel ? .semibold : .regular))
+        .foregroundStyle(sel ? color : Color.white.opacity(0.6))
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .frame(maxWidth: fill ? .infinity : nil)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(sel ? color.opacity(0.2) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(sel ? color.opacity(0.45) : Color.clear, lineWidth: 1)
+        )
+        .buttonStyle(.plain)
+        .disabled(disabledAll)
     }
 }
 
