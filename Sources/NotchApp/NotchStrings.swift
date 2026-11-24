@@ -25,7 +25,7 @@ enum NotchLang: String, CaseIterable {
 
 /// IDs estables de pestaña (lo que se guarda en Ajustes).
 enum NotchTab: String, CaseIterable {
-    case shelf, focus, agenda, mac, tiempo, activity, agents, music, notes, tasks
+    case shelf, focus, agenda, launcher, mac, tiempo, activity, agents, music, notes, tasks
 
     /// Título visible según el idioma.
     var title: String { tr("tab.\(rawValue)") }
@@ -35,6 +35,7 @@ enum NotchTab: String, CaseIterable {
         case .shelf: return "tray"
         case .focus: return "timer"
         case .agenda: return "calendar"
+        case .launcher: return "command"
         case .mac: return "cpu"
         case .tiempo: return "cloud.sun.fill"
         case .activity: return "chart.bar"
@@ -149,6 +150,12 @@ enum NotchStrings {
             "set.liquidSub": "Estilo macOS Tahoe: brillos especulares, filos de cristal y luz de estudio en el panel y los ajustes.",
             "set.msgToast": "mensajes en el notch",
             "tab.agenda": "agenda", "agenda.today": "hoy", "agenda.tomorrow": "mañana",
+            "tab.launcher": "lanzador",
+            "launch.ph": "buscar apps, archivos, notas, tareas…",
+            "launch.files": "recientes", "launch.apps": "aplicaciones",
+            "launch.notes": "notas", "launch.tasks": "tareas",
+            "launch.clips": "portapapeles",
+            "launch.empty": "sin resultados", "launch.copied": "copiado al portapapeles",
             "agenda.empty": "sin eventos", "agenda.allDay": "todo el día",
             "agenda.join": "unirse", "agenda.now": "en curso",
             "agenda.in": "en %d min", "agenda.enable": "activar agenda",
@@ -408,6 +415,12 @@ enum NotchStrings {
             "set.liquidSub": "macOS Tahoe style: specular highlights, glass edges and studio light across the panel and settings.",
             "set.msgToast": "messages in the notch",
             "tab.agenda": "calendar", "agenda.today": "today", "agenda.tomorrow": "tomorrow",
+            "tab.launcher": "launcher",
+            "launch.ph": "search apps, files, notes, tasks…",
+            "launch.files": "recent", "launch.apps": "applications",
+            "launch.notes": "notes", "launch.tasks": "tasks",
+            "launch.clips": "clipboard",
+            "launch.empty": "no results", "launch.copied": "copied to clipboard",
             "agenda.empty": "no events", "agenda.allDay": "all day",
             "agenda.join": "join", "agenda.now": "now",
             "agenda.in": "in %d min", "agenda.enable": "enable calendar",
@@ -663,6 +676,12 @@ enum NotchStrings {
             "set.liquidSub": "Style macOS Tahoe : reflets spéculaires, bords de cristal et lumière d'atelier dans le panneau et les réglages.",
             "set.msgToast": "messages dans le notch",
             "tab.agenda": "agenda", "agenda.today": "aujourd'hui", "agenda.tomorrow": "demain",
+            "tab.launcher": "lanceur",
+            "launch.ph": "chercher apps, fichiers, notes, tâches…",
+            "launch.files": "récents", "launch.apps": "applications",
+            "launch.notes": "notes", "launch.tasks": "tâches",
+            "launch.clips": "presse-papiers",
+            "launch.empty": "aucun résultat", "launch.copied": "copié dans le presse-papiers",
             "agenda.empty": "aucun événement", "agenda.allDay": "journée entière",
             "agenda.join": "rejoindre", "agenda.now": "en cours",
             "agenda.in": "dans %d min", "agenda.enable": "activer l'agenda",
@@ -872,6 +891,12 @@ enum NotchStrings {
             "set.liquidSub": "macOS-Tahoe-Stil: spekulaire Glanzlichter, Glasränder und Studiolicht in Panel und Einstellungen.",
             "set.msgToast": "Nachrichten im Notch",
             "tab.agenda": "Kalender", "agenda.today": "heute", "agenda.tomorrow": "morgen",
+            "tab.launcher": "Launcher",
+            "launch.ph": "Apps, Dateien, Notizen, Aufgaben suchen…",
+            "launch.files": "zuletzt", "launch.apps": "Apps",
+            "launch.notes": "Notizen", "launch.tasks": "Aufgaben",
+            "launch.clips": "Zwischenablage",
+            "launch.empty": "keine Treffer", "launch.copied": "in die Zwischenablage kopiert",
             "agenda.empty": "keine Termine", "agenda.allDay": "ganztägig",
             "agenda.join": "beitreten", "agenda.now": "läuft",
             "agenda.in": "in %d Min", "agenda.enable": "Kalender aktivieren",

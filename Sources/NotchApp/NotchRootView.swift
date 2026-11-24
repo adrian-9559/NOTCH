@@ -80,6 +80,7 @@ struct NotchRootView: View {
         ) {
             withAnimation(.snappy(duration: 0.22)) {
                 selectedTitle = tabs[i].title
+                fputs("NOTCH-TAB → \(tabs[i].title)\n", stderr)
             }
         }
         .overlay(alignment: .bottom) {
@@ -207,6 +208,7 @@ struct NotchRootView: View {
                         .padding(.bottom, 14)
                         .padding(.horizontal, 16)
                         .onPreferenceChange(ContentHeightKey.self) { h in
+                            fputs("NOTCH-H h=\(h) tab=\(selectedTitle)\n", stderr)
                             contentHeight = h
                             let clamped = min(max(h, minContentHeight), maxContentHeight)
                             guard abs(clamped - targetHeight) > 0.5 else { return }
@@ -252,6 +254,14 @@ struct NotchRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .notchShowTasks)) { _ in
             withAnimation(.snappy(duration: 0.22)) {
                 selectedTitle = NotchTab.tasks.rawValue
+            }
+        }
+        // Cambio genérico de pestaña por id (el lanzador: notas/tareas).
+        .onReceive(NotificationCenter.default.publisher(for: .notchShowTab)) { note in
+            if let id = note.object as? String, NotchTab(rawValue: id) != nil {
+                withAnimation(.snappy(duration: 0.22)) {
+                    selectedTitle = id
+                }
             }
         }
         // Como Lumio: vidrio oscuro siempre, de día y de noche.

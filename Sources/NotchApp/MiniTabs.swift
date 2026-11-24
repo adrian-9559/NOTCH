@@ -46,6 +46,7 @@ enum MiniTabs {
                 (title: NotchTab.mac.rawValue, view: AnyView(StatsView(sessions: store))),
                 (title: NotchTab.tiempo.rawValue, view: AnyView(WeatherView())),
                 (title: NotchTab.agenda.rawValue, view: AnyView(AgendaView())),
+                (title: NotchTab.launcher.rawValue, view: AnyView(LauncherView())),
                 (title: NotchTab.activity.rawValue, view: AnyView(ActivityView())),
                 (title: NotchTab.agents.rawValue, view: AnyView(AgentsView(store: store))),
                 (title: NotchTab.music.rawValue, view: AnyView(MusicView(store: ctx.music))),
